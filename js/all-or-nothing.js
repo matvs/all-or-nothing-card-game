@@ -37,9 +37,11 @@ var AllOrNothing = {
     cards: [],
     ctx: null,
     canvas: null,
+    alreadyFoundSetsContainer: null,
 
     set: [],
     foundSets: [],
+    startTime: 0,
 
     init: function () {
         for (let color of this.properties.color) {
@@ -60,6 +62,8 @@ var AllOrNothing = {
     start: function () {
         this.canvas = document.getElementById(this.defaultOptions.canvasId);
         this.ctx = this.canvas.getContext('2d');
+        this.alreadyFoundSetsContainer = document.getElementById("alreadyFoundSets");
+        this.alreadyFoundSetsContainer.innerHTML = "<p>Already found Sets:</p>";
         //var i = this.i;
         /*setTimeout(() => {
             this.ctx.clearRect(0,0,this.canvas.width, this.canvas.height);
@@ -106,6 +110,7 @@ var AllOrNothing = {
         console.log('There are ' + this.allSets.length + ' sets')
         console.log(this.allSets)
         this.foundSets = [];
+        this.startTime = new Date().getTime();
         //this.ctx.restore();
     },
 
@@ -190,8 +195,19 @@ var AllOrNothing = {
                     else {
                         alert("Brawo, znalazlas set!");
                         this.foundSets.push(this.set);
+                        let div = document.createElement("div");
+                        for(let card of this.set) {
+                            let imageURL = card.toImage();
+                            //console.log(card.toImage());
+                            let imageHTML = document.createElement("img");
+                            imageHTML.src = imageURL;
+                            imageHTML.style.display="inline"
+                            div.appendChild(imageHTML);
+                        }
+                        this.alreadyFoundSetsContainer.appendChild(div);
                         if(this.foundSets.length == this.allSets.length){
-                            alert("You found all sets");
+                            let timePlayed = (new Date().getTime() - this.startTime)/(1000*60);
+                            alert("You found all sets. It took you " + timePlayed.toFixed(2) + " minutes");
                         }
                     }
                  
@@ -239,7 +255,7 @@ var AllOrNothing = {
     }
 }.init();
 
-
+const virtualCanvas = document.createElement("canvas");
 function Card(color, shape, filling, number) {
     var self = this;
 
@@ -380,6 +396,13 @@ function Card(color, shape, filling, number) {
 
     self.isEqual = function (card) {
         return card && self.color === card.color && self.filling === card.filling && self.shape === card.shape && self.number === card.number
+    }
+
+    self.toImage = function() {
+        virtualCanvas.width = shapesProps.card.width;
+        virtualCanvas.height = shapesProps.card.height;
+        virtualCanvas.getContext("2d").drawImage(AllOrNothing.canvas, self.cardBorders.x, self.cardBorders.y, self.cardBorders.w, self.cardBorders.h, 0, 0, self.cardBorders.w, self.cardBorders.h);
+        return virtualCanvas.toDataURL();
     }
     drawCardBorders = function (ctx, cardBorders) {
         ctx.save();
