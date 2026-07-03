@@ -1,0 +1,39 @@
+{
+  "name": "all-or-nothing-card-game",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "All or Nothing — a trick-taking bidding card game. Single player vs AI, and realtime multiplayer.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n web,api -c blue,green \"npm:dev:web\" \"npm:dev:server\"",
+    "dev:web": "vite",
+    "dev:server": "tsx watch server/index.ts",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "NODE_ENV=production tsx server/index.ts",
+    "preview": "vite preview --port 4173"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "express": "^4.19.2",
+    "tsx": "^4.19.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.7.4",
+    "@types/supertest": "^6.0.2",
+    "@types/ws": "^8.5.12",
+    "concurrently": "^9.0.1",
+    "supertest": "^7.0.0",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vitest": "^2.1.1"
+  }
+}
