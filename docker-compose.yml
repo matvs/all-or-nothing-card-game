@@ -1,0 +1,39 @@
+# All or Nothing — one Node service serving the frontend + REST + WebSocket.
+# Published on 127.0.0.1:8462 only; the droplet's host nginx terminates TLS and
+# proxies to it (see nginx/allornothing.matvs.dev.conf). SQLite data lives in a
+# named volume mounted at /data.
+#
+#   docker compose up -d --build
+#
+services:
+  app:
+    build: .
+    image: allornothing:latest
+    container_name: allornothing
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "8462"
+      DB_PATH: /data/allornothing.sqlite3
+      RECONNECT_GRACE_SECONDS: "60"
+      # How long an AI "thinks" before acting, in ms (pacing for human players).
+      AI_THINK_DELAY_MS: "600"
+      TZ: Europe/Warsaw
+    ports:
+      # Bind to loopback only — never expose the container port publicly.
+      - "127.0.0.1:8462:8462"
+    volumes:
+      - allornothing_data:/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8462/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 4s
+      retries: 3
+      start_period: 8s
+
+volumes:
+  allornothing_data:
