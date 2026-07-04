@@ -13,8 +13,10 @@ import { ExplanationTable } from "../../components/ExplanationTable.js";
 import { FoundSetsPanel } from "../../components/FoundSetsPanel.js";
 import { Board } from "../../game/Board.js";
 import { ChatPanel } from "./ChatPanel.js";
+import { VoiceBar } from "./VoiceBar.js";
 import { handCursorDataUri } from "./handCursor.js";
 import { useRoom } from "./useRoom.js";
+import { useVoice } from "./useVoice.js";
 
 /** Coloured seat swatches; click a free one to take that seat. */
 function SeatPicker({
@@ -84,6 +86,7 @@ export function RoomPage() {
   const { roomId = "" } = useParams();
   const navigate = useNavigate();
   const room = useRoom(roomId);
+  const voice = useVoice(roomId);
   const containerRef = useRef<HTMLDivElement>(null);
   const [whyRows, setWhyRows] = useState<ExplanationRow[] | null>(null);
 
@@ -167,6 +170,7 @@ export function RoomPage() {
         </Button>
       </div>
 
+      <VoiceBar voice={voice} players={room.players} />
       <Roster players={room.players} />
       <SeatPicker players={room.players} meColor={room.me?.color} onSit={room.sit} />
 

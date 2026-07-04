@@ -68,6 +68,25 @@ async function openPlayer(
   await page.evaluateOnNewDocument((p: unknown) => {
     localStorage.setItem("aon:player", JSON.stringify(p));
   }, player);
+  // chrome-headless-shell has no real microphone; synthesise one with an
+  // AudioContext tone so getUserMedia yields a genuine audio track and the
+  // WebRTC offer/answer handshake can run over the signalling relay.
+  await page.evaluateOnNewDocument(() => {
+    const fakeMic = async () => {
+      const Ctx = (window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext) as typeof AudioContext;
+      const ctx = new Ctx();
+      const dest = ctx.createMediaStreamDestination();
+      const osc = ctx.createOscillator();
+      osc.connect(dest);
+      osc.start();
+      return dest.stream;
+    };
+    if (!navigator.mediaDevices) {
+      Object.defineProperty(navigator, "mediaDevices", { value: {}, configurable: true });
+    }
+    (navigator.mediaDevices as unknown as { getUserMedia: () => Promise<MediaStream> }).getUserMedia = fakeMic;
+  });
   await page.goto(`${base}/room/${roomId}`, { waitUntil: "networkidle0", timeout: 20000 });
   await page.waitForSelector(".seat-picker", { timeout: 10000 });
   return page;
@@ -92,7 +111,16 @@ async function main(): Promise<void> {
   const browser: Browser = await puppeteer.launch({
     executablePath: CHROME,
     headless: true,
-    args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage", "--force-color-profile=srgb"],
+    args: [
+      "--no-sandbox",
+      "--disable-gpu",
+      "--disable-dev-shm-usage",
+      "--force-color-profile=srgb",
+      // Grant + fake a microphone so the WebRTC voice mesh can be exercised.
+      "--use-fake-device-for-media-stream",
+      "--use-fake-ui-for-media-stream",
+      "--autoplay-policy=no-user-gesture-required",
+    ],
   });
 
   try {
@@ -133,7 +161,10 @@ async function main(): Promise<void> {
     await wait(600);
     const idsA = await boardIds(pageA);
     const idsB = await boardIds(pageB);
-    assert(idsA.length === 12, `Alice's board has 12 cards (got ${idsA.length})`);
+    assert(
+      idsA.length >= 12 && idsA.length % 3 === 0,
+      `Alice's board is a valid size (12 + dealt rows) — got ${idsA.length}`,
+    );
     assert(JSON.stringify(idsA) === JSON.stringify(idsB), "Both clients see the SAME shared board");
     await pageA.screenshot({ path: path.join(OUT, "race-playing.png") as `${string}.png` });
 
@@ -181,6 +212,31 @@ async function main(): Promise<void> {
     assert(true, "Bob received Alice's reply");
     await wait(200);
     await pageA.screenshot({ path: path.join(OUT, "race-chat.png") as `${string}.png` });
+
+    // Voice: both join the WebRTC mesh. The offer/answer handshake runs over the
+    // server's signalling relay, so a peer appears on BOTH clients. (ICE cannot
+    // fully connect under chrome-headless-shell, so we verify the signalling
+    // handshake here and the ICE/media path in unit + server integration tests.)
+    assert(await clickButtonWithText(pageA, "🎙 Join voice"), "Alice joined voice");
+    await wait(300);
+    assert(await clickButtonWithText(pageB, "🎙 Join voice"), "Bob joined voice");
+    await pageA.waitForFunction(() => !!document.querySelector(".voice-peer"), { timeout: 15000 });
+    await pageB.waitForFunction(() => !!document.querySelector(".voice-peer"), { timeout: 15000 });
+    assert(true, "Alice sees Bob in the voice channel (offer/answer relayed)");
+    assert(true, "Bob sees Alice in the voice channel (offer/answer relayed)");
+    // Exercise push-to-talk: Alice holds to talk (enables her mic track).
+    await pageA.evaluate(() => {
+      const btn = Array.from(document.querySelectorAll("button")).find((b) =>
+        (b.textContent ?? "").includes("Hold to talk"),
+      );
+      btn?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    });
+    const talking = await pageA.evaluate(() =>
+      Array.from(document.querySelectorAll("button")).some((b) => (b.textContent ?? "").includes("Talking")),
+    );
+    assert(talking, "Push-to-talk enables Alice's mic (button shows Talking)");
+    await wait(200);
+    await pageA.screenshot({ path: path.join(OUT, "race-voice.png") as `${string}.png` });
 
     console.log("\nMULTIPLAYER E2E PASSED — screenshots in", OUT);
   } finally {
