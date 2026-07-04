@@ -171,6 +171,8 @@ export class SocketGateway {
         points: outcome.player.points,
       });
       this.io.to(room.id).emit("game:board", room.gameState());
+      // Re-broadcast the roster so every client's scoreboard reflects the point.
+      this.io.to(room.id).emit("room:players", room.roster());
       if (room.isOver()) {
         this.io.to(room.id).emit("game:over", { players: room.roster(), winnerIds: room.winnerIds() });
       }
@@ -181,6 +183,8 @@ export class SocketGateway {
           playerId: outcome.player.id,
           points: outcome.player.points,
         });
+        // Penalty applied — refresh the scoreboard for everyone.
+        this.io.to(room.id).emit("room:players", room.roster());
       }
     }
   }

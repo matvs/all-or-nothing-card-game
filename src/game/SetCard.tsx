@@ -37,6 +37,7 @@ export function SetCard({ card, selected = false, status = "idle", disabled = fa
       className={classNames}
       aria-pressed={selected}
       aria-label={describeCard(card)}
+      data-card-id={card.id}
       disabled={disabled}
       onClick={() => onActivate?.(card.id)}
     >

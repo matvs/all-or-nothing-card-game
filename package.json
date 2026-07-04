@@ -17,7 +17,8 @@
     "test:watch": "vitest",
     "start": "NODE_ENV=production node --import tsx server/index.ts",
     "preview": "NODE_ENV=production PORT=8462 node --import tsx server/index.ts",
-    "screenshot": "node --import tsx scripts/screenshot.mts"
+    "screenshot": "node --import tsx scripts/screenshot.mts",
+    "verify:mp": "node --import tsx scripts/verify-multiplayer.mts"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.2.7",
