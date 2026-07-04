@@ -43,9 +43,13 @@ export function isGameOver(t: Tableau): boolean {
   return t.deck.length === 0 && !hasSet(t.board);
 }
 
-/** Start a fresh tableau: shuffle, deal 12, then top up until a set exists. */
-export function newTableau(rng: Rng = Math.random): Tableau {
-  const t: Tableau = { deck: shuffle(buildDeck(), rng), board: [] };
+/**
+ * Start a fresh tableau: shuffle, deal 12, then top up until a set exists.
+ * An optional `cards` pool lets difficulty modes play with a reduced deck
+ * (e.g. a single shading, giving an easier 3-attribute game).
+ */
+export function newTableau(rng: Rng = Math.random, cards: readonly Card[] = buildDeck()): Tableau {
+  const t: Tableau = { deck: shuffle(cards, rng), board: [] };
   while (t.board.length < INITIAL_BOARD && t.deck.length > 0) {
     t.board.push(t.deck.pop()!);
   }
