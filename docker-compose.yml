@@ -21,7 +21,7 @@ services:
       TZ: Europe/Warsaw
     ports:
       # Bind to loopback only — never expose the container port publicly.
-      - "127.0.0.1:8462:8462"
+      - "8462:8462"
     volumes:
       - allornothing_data:/data
     healthcheck:
