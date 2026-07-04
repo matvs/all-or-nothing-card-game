@@ -1,18 +1,13 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#f4eee1" />
-    <meta
-      name="description"
-      content="All or Nothing — a trick-taking card game of exact promises. Bid precisely how many tricks you'll take; miss by one and score nothing. Solo vs AI or with friends."
-    />
-    <title>All or Nothing</title>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+<html>
+<head>
+<title>All or nothing card game</title>
+<script src="js/all-or-nothing.js"></script>
+</head>
+<body>
+<canvas id="canvas" width="700" height="700"  style="border:1px solid black">
+Your browser does not support canvas. 
+</canvas>
+<button onclick="AllOrNothing.start()">Start</button>
+<div id="alreadyFoundSets"></div>
+</body>
 </html>
