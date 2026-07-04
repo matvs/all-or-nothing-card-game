@@ -197,6 +197,29 @@ describe("STOMP multiplayer race (end to end)", () => {
     const bad = new TestClient({ ...creds, token: "not-the-token" });
     await expect(bad.connect()).rejects.toThrow();
   });
+
+  it("lets a dropped player reconnect with their token and keep their score", async () => {
+    const creds = await createRoom("Ada");
+    const first = new TestClient(creds);
+    await first.connect();
+    first.send("start");
+    const playing = await first.waitForRoom((m) => m.room.status === "playing");
+    first.send("claim", { cards: boardSet(playing) });
+    await first.waitForRoom((m) => m.type === "event" && m.event.kind === "claimed");
+
+    // Simulate a connection drop.
+    await first.disconnect();
+
+    // Reconnect with the SAME credentials (playerId + token).
+    const again = new TestClient(creds);
+    await again.connect();
+    const resumed = await again.waitForRoom(
+      (m) => m.room.status === "playing" && m.room.players.some((p) => p.id === creds.playerId && p.connected),
+    );
+    const me = resumed.room.players.find((p) => p.id === creds.playerId)!;
+    expect(me.score).toBe(1); // score survived the reconnect
+    await again.disconnect();
+  });
 });
 
 function pickNonSet(message: RoomMessage): [number, number, number] {
