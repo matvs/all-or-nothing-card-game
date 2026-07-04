@@ -173,6 +173,7 @@ function finishRound(match: MatchState, round: RoundState, tricksWon: Record<Sea
     bids,
     tricksWon,
     scores,
+    finalTrick: round.completedTricks.at(-1) ?? [],
   };
   const totalScores = zeroRecord();
   for (const seat of SEATS) {

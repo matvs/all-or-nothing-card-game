@@ -287,6 +287,9 @@ describe("playing cards", () => {
     if (!final.ok) return;
     // Seat 2's lone trump beats three hearts -> wins the trick -> round (and match, peak=1) complete.
     expect(final.state.history).toHaveLength(1);
+    // The closing trick is preserved verbatim for clients (sweep animation).
+    expect(final.state.history[0].finalTrick).toHaveLength(4);
+    expect(final.state.history[0].finalTrick.map((p) => p.seat)).toEqual([1, 2, 3, 0]);
     expect(final.state.history[0].tricksWon[2]).toBe(1);
     expect(final.state.history[0].bids[2]).toBe(0);
     // Seat 2 bid 0 but won 1 -> busted -> scores 0 for the round.

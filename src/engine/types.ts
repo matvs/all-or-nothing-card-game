@@ -64,6 +64,12 @@ export interface RoundResult {
   readonly tricksWon: Record<SeatIndex, number>;
   /** Points earned in this round only (not cumulative). */
   readonly scores: Record<SeatIndex, number>;
+  /**
+   * The round's last trick exactly as played (public information). Kept so
+   * clients can animate the closing sweep even though the engine state has
+   * already rolled on to the next round.
+   */
+  readonly finalTrick: PlayedCard[];
 }
 
 export interface RoundState {
