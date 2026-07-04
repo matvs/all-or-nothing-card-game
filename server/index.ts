@@ -4,9 +4,11 @@ import { env } from "./env.js";
 const built = buildServer();
 
 built.httpServer.listen(env.port, () => {
-  const mode = env.isProduction ? "production (serving dist/)" : "development (frontend via Vite dev server)";
+  const mode = env.isProduction
+    ? "production (serving dist/)"
+    : "development (frontend via Vite dev server)";
   console.log(
-    `[all-or-nothing SET] ${mode} — http://127.0.0.1:${env.port} (STOMP over WebSocket at /stomp)`,
+    `[all-or-nothing SET] ${mode} — http://127.0.0.1:${env.port} (Socket.IO realtime, chat + WebRTC voice signalling)`,
   );
 });
 

@@ -1,80 +1,97 @@
+import { randomUUID } from "node:crypto";
 import { generateRoomCode } from "../../shared/id.js";
-import { Room, type RoomDeps } from "./room.js";
+import { ROOM_NAME_MAX_LENGTH } from "../../shared/protocol.js";
+import { type PlayerIdentity, Room } from "./room.js";
 
-export interface RegistryOptions extends RoomDeps {
-  /** Rooms with no live connections for longer than this are swept. */
-  idleTtlMs?: number;
-  sweepIntervalMs?: number;
-  /** Deterministic code generator for tests. */
-  codeRng?: () => number;
+const FORBIDDEN = new Set(["kurwa", "dick", "fuck"]);
+
+export interface RegistryOptions {
+  /** Seed a couple of always-open rooms for demos/manual testing. */
+  seedRooms?: string[];
 }
 
+/**
+ * In-memory store of player identities and rooms. Player identity is keyed by
+ * an opaque token so a browser can reconnect (after a refresh or a drop) and
+ * be recognised as the same player, keeping its seat and score.
+ */
 export class RoomRegistry {
-  private rooms = new Map<string, Room>();
-  private lastActive = new Map<string, number>();
-  private sweepTimer: ReturnType<typeof setInterval> | null = null;
-  private idleTtlMs: number;
+  private readonly rooms = new Map<string, Room>();
+  private readonly byToken = new Map<string, PlayerIdentity>();
+  private readonly byId = new Map<string, PlayerIdentity>();
 
-  constructor(private opts: RegistryOptions = {}) {
-    this.idleTtlMs = opts.idleTtlMs ?? 30 * 60 * 1000;
-    const interval = opts.sweepIntervalMs ?? 60 * 1000;
-    this.sweepTimer = setInterval(() => this.sweepIdle(), interval);
-    this.sweepTimer.unref?.();
-  }
-
-  private now(): number {
-    return (this.opts.now ?? Date.now)();
-  }
-
-  createRoom(hostName: string): { room: Room; playerId: string; token: string } {
-    const code = this.uniqueCode();
-    const room = new Room(code, this.opts);
-    const { playerId, token } = room.addPlayer(hostName);
-    this.rooms.set(code, room);
-    this.lastActive.set(code, this.now());
-    return { room, playerId, token };
-  }
-
-  private uniqueCode(): string {
-    for (let attempt = 0; attempt < 200; attempt++) {
-      const code = generateRoomCode(this.opts.codeRng ?? Math.random);
-      if (!this.rooms.has(code)) return code;
+  constructor(options: RegistryOptions = {}) {
+    for (const id of options.seedRooms ?? ["demo"]) {
+      this.rooms.set(id, new Room(id));
     }
-    throw new Error("Room code space saturated");
   }
 
-  getRoom(code: string): Room | null {
-    return this.rooms.get(code.toUpperCase()) ?? null;
+  // -- players -------------------------------------------------------------
+
+  createPlayer(name: string): PlayerIdentity {
+    const identity: PlayerIdentity = { id: randomUUID(), name, token: randomUUID() };
+    this.byToken.set(identity.token, identity);
+    this.byId.set(identity.id, identity);
+    return identity;
   }
 
-  markActive(code: string): void {
-    this.lastActive.set(code.toUpperCase(), this.now());
+  playerByToken(token: string | undefined): PlayerIdentity | undefined {
+    return token ? this.byToken.get(token) : undefined;
   }
 
-  roomCount(): number {
+  /** Resolve the auth handshake to a known identity (or undefined if stale). */
+  resolveIdentity(auth: { token?: string; playerId?: string }): PlayerIdentity | undefined {
+    const byToken = this.playerByToken(auth.token);
+    if (byToken && byToken.id === auth.playerId) return byToken;
+    return byToken;
+  }
+
+  // -- rooms ---------------------------------------------------------------
+
+  /** Create a room. Empty name → random code. Returns error codes like the original. */
+  createRoom(roomId?: string):
+    | { id: string }
+    | { id: string; error: true; errorCode: "alreadyExists" | "invalidName" } {
+    let id = roomId?.trim();
+    if (id) {
+      if (id.length > ROOM_NAME_MAX_LENGTH || FORBIDDEN.has(id.toLowerCase())) {
+        return { id, error: true, errorCode: "invalidName" };
+      }
+      if (this.rooms.has(id)) {
+        return { id, error: true, errorCode: "alreadyExists" };
+      }
+    } else {
+      id = generateRoomCode();
+      while (this.rooms.has(id)) id = generateRoomCode();
+    }
+    this.rooms.set(id, new Room(id));
+    return { id };
+  }
+
+  getRoom(roomId: string): Room | undefined {
+    return this.rooms.get(roomId);
+  }
+
+  getOrCreateRoom(roomId: string): Room {
+    let room = this.rooms.get(roomId);
+    if (!room) {
+      room = new Room(roomId);
+      this.rooms.set(roomId, room);
+    }
+    return room;
+  }
+
+  deleteRoom(roomId: string): void {
+    this.rooms.delete(roomId);
+  }
+
+  get roomCount(): number {
     return this.rooms.size;
   }
 
-  sweepIdle(): number {
-    let swept = 0;
-    for (const [code, room] of this.rooms) {
-      if (!room.isEmpty()) {
-        this.lastActive.set(code, this.now());
-        continue;
-      }
-      const last = this.lastActive.get(code) ?? room.createdAt;
-      if (this.now() - last > this.idleTtlMs) {
-        this.rooms.delete(code);
-        this.lastActive.delete(code);
-        swept++;
-      }
-    }
-    return swept;
-  }
-
   dispose(): void {
-    if (this.sweepTimer) clearInterval(this.sweepTimer);
     this.rooms.clear();
-    this.lastActive.clear();
+    this.byToken.clear();
+    this.byId.clear();
   }
 }

@@ -11,10 +11,18 @@
 
 export type Triple = 0 | 1 | 2;
 
-/** Display metadata. Rendering maps these indices to concrete visuals. */
-export const COLORS = ["red", "green", "purple"] as const;
+/**
+ * Display metadata — index order is the ORIGINAL recovered deck's order, so the
+ * canonical 0..80 id maps to exactly the same visual as the lost original.
+ * (Original cardProps.js: colours were keyed red/green/blue but their hex values
+ * are purple/green/crimson; fillings were none/full/dashed; numbers 1/2/3.)
+ */
+export const COLORS = ["purple", "green", "crimson"] as const;
+/** The exact original hex per colour index (cardProps.js COLORS values). */
+export const COLOR_HEX = ["#4B0082", "#228B22", "#DC143C"] as const;
 export const SHAPES = ["square", "circle", "triangle"] as const;
-export const SHADINGS = ["open", "solid", "striped"] as const;
+/** Original called this "filling": none (outline), full (solid), dashed (striped gradient). */
+export const SHADINGS = ["none", "full", "dashed"] as const;
 /** Number of symbols actually drawn on the card (index 0 -> 1 symbol, etc.). */
 export const COUNTS = [1, 2, 3] as const;
 
@@ -23,8 +31,20 @@ export type Shape = (typeof SHAPES)[number];
 export type Shading = (typeof SHADINGS)[number];
 export type Count = (typeof COUNTS)[number];
 
+/**
+ * Attribute keys, using the ORIGINAL UI's labels so the "Explanation" table
+ * reads color / shape / filling / number exactly like the recovered design.
+ * (Internally the Card fields are color/shape/shading/count; `filling` and
+ * `number` are the display labels for shading and count respectively.)
+ */
 export const ATTRIBUTES = ["color", "shape", "shading", "count"] as const;
 export type Attribute = (typeof ATTRIBUTES)[number];
+export const ATTRIBUTE_LABELS: Record<Attribute, string> = {
+  color: "color",
+  shape: "shape",
+  shading: "filling",
+  count: "number",
+};
 
 export const DECK_SIZE = 81;
 

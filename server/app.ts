@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { env } from "./env.js";
 import { createApiRouter } from "./http/api.js";
-import { RaceService } from "./rooms/raceService.js";
 import { RoomRegistry, type RegistryOptions } from "./rooms/registry.js";
 
 export interface AppOptions {
@@ -16,13 +15,14 @@ export interface AppOptions {
 export interface AppBundle {
   app: Express;
   registry: RoomRegistry;
-  service: RaceService;
-  dispose(): void;
 }
 
+/**
+ * Build the Express app: REST under /api, plus (in production) the built
+ * frontend served from dist/ with an SPA fallback. Same-origin → zero CORS.
+ */
 export function createApp(options: AppOptions = {}): AppBundle {
   const registry = options.registry ?? new RoomRegistry(options.registryOptions);
-  const service = new RaceService(registry);
 
   const app = express();
   app.disable("x-powered-by");
@@ -32,20 +32,13 @@ export function createApp(options: AppOptions = {}): AppBundle {
   const staticDir = options.staticDir === undefined ? defaultStaticDir() : options.staticDir;
   if (staticDir) {
     app.use(express.static(staticDir, { index: "index.html", maxAge: "1h" }));
-    // SPA fallback for any non-API, non-STOMP GET.
-    app.get(/^\/(?!api\/|stomp$).*/, (_req, res) => {
+    // SPA fallback for any non-API, non-socket GET.
+    app.get(/^\/(?!api\/|socket\.io\/).*/, (_req, res) => {
       res.sendFile(path.join(staticDir, "index.html"));
     });
   }
 
-  return {
-    app,
-    registry,
-    service,
-    dispose() {
-      registry.dispose();
-    },
-  };
+  return { app, registry };
 }
 
 function defaultStaticDir(): string | null {

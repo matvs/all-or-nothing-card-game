@@ -1,32 +1,18 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0d6efd" />
+    <meta name="theme-color" content="#4B0082" />
     <meta
       name="description"
-      content="All or Nothing — a SET card game. Find sets of three cards where colour, shape, number and shading are each all the same or all different. Solo puzzle modes and real-time multiplayer races. Canvas-rendered tiles, Bootstrap 5.3 interface."
+      content="All or Nothing — a SET card game. Find sets of three cards where colour, shape, filling and number are each all the same or all different. Single-player and real-time multiplayer rooms with text and push-to-talk voice chat."
     />
-    <title>All or Nothing — SET</title>
+    <title>All or Nothing Card Game</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <script>
-      // Set Bootstrap's colour mode before first paint to avoid a light/dark flash.
-      (function () {
-        try {
-          var t = localStorage.getItem("aon-set:theme");
-          if (t !== "light" && t !== "dark") {
-            t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-          }
-          document.documentElement.setAttribute("data-bs-theme", t);
-        } catch (e) {
-          /* ignore */
-        }
-      })();
-    </script>
   </head>
   <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
