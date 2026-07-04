@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "start": "NODE_ENV=production tsx server/index.ts",
+    "smoke": "node --import tsx scripts/smoke.mts",
+    "start": "NODE_ENV=production node --import tsx server/index.ts",
     "preview": "vite preview --port 4173"
   },
   "dependencies": {
