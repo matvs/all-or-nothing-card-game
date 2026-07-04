@@ -36,14 +36,14 @@ on the *same* board; the first to claim a valid set scores it and fresh cards
 drop in; a wrong claim costs a point. Live scoreboard, each player's **coloured
 hand cursor**, and reconnect-with-token that keeps your seat and score.
 
-- **Text chat** — over the same Socket.IO connection, authors coloured by seat.
+- **Text chat** — over the same WebSocket connection, authors coloured by seat.
 - **Voice chat** — an opt-in **WebRTC** mesh with **push-to-talk** (hold the
   button or Space); signalling is relayed by the server, audio is peer-to-peer.
 
 ## Architecture
 
 One Node service serves the built frontend, the REST API (`/api`) and the
-Socket.IO endpoint (`/socket.io`) on a single port (8462), **same-origin** so
+native WebSocket endpoint (`/ws`) on a single port (8462), **same-origin** so
 there is no CORS. The SET engine is a pure, framework-free TypeScript module
 shared verbatim by client and server, so the server can authoritatively
 validate every claim.
@@ -53,7 +53,7 @@ shared/engine/    Pure SET logic: 81-card deck, seedable RNG, isSet (via the
                   (a+b+c) % 3 identity), findAllSets / hasSet / thirdCard,
                   the Tableau state machine (deal-until-set, claim/replace),
                   and the Explanation builder. Exhaustively tested.
-shared/protocol   Socket.IO wire contract (events, seat colours, payloads).
+shared/protocol   Native WebSocket wire contract (events, seat colours, payloads).
 src/game/         cardFace.ts — the faithful canvas port of Card.js; SetCard /
                   Board tiles; the single-player game (useSinglePlayerGame).
 src/features/     mainPage, session (Redux slice + thunks), modals (login /
@@ -61,27 +61,32 @@ src/features/     mainPage, session (Redux slice + thunks), modals (login /
 src/features/room useRoom (game socket), RoomPage, ChatPanel, VoiceBar +
                   useVoice (WebRTC mesh), handCursor.
 src/app/          Redux Toolkit store + typed hooks.
-src/net/          Socket.IO client singleton (identity in the handshake auth).
-server/           Express app + static (app.ts), SocketGateway (socket.ts),
+src/net/          Native WebSocket client wrapper (identity in the connect URL).
+server/           Express app + static (app.ts), WsGateway (socket.ts, ws),
                   rooms/ (Room shared state + RoomRegistry), http/api.ts (REST),
-                  build.ts (HTTP + Socket.IO wiring), index.ts (entrypoint).
+                  build.ts (HTTP + WebSocket wiring), index.ts (entrypoint).
 ```
 
-### Why Socket.IO
-The original game used Socket.IO; it is kept deliberately. SET has no hidden
-information — the whole board is public — so nothing needs server-side
-redaction; every player in a room sees the same board. Cards travel as their
-canonical `0..80` id (rebuild with `cardFromId`). The design is
-**server-authoritative**: the client never says "I scored", it only asks "I
-claim these three ids" and the server validates against the real board before
-awarding a point and dealing on.
+### Why native WebSockets
+The realtime transport is **raw WebSockets** — the `ws` library on the server,
+the browser's built-in `WebSocket` on the client — chosen for lowest latency
+(no Socket.IO framing/overhead). A tiny JSON envelope `{ t: type, d: payload,
+id? }` carries every event; `id` marks a request that expects a single ack reply
+(used by the claim). A small client wrapper adds the niceties Socket.IO gave for
+free: a synthetic `connect` event re-fired on reconnect, exponential-backoff
+reconnection, an app-level ping, and request/ack. SET has no hidden information
+— the whole board is public — so nothing needs server-side redaction; every
+player in a room sees the same board. Cards travel as their canonical `0..80`
+id (rebuild with `cardFromId`). The design is **server-authoritative**: the
+client never says "I scored", it only asks "I claim these three ids" and the
+server validates against the real board before awarding a point and dealing on.
 
 ## Develop
 
 ```bash
 npm install
 npm run dev         # Vite (:5173, HMR) + tsx server (:8462); open :5173
-npm test            # 79 tests: engine, rooms, registry, REST, Socket.IO e2e
+npm test            # 79 tests: engine, rooms, registry, REST, WebSocket e2e
 npm run typecheck   # tsc --noEmit
 npm run build       # -> dist/
 docker compose up -d --build   # one container on 127.0.0.1:8462
@@ -107,6 +112,6 @@ See **runbook.md** for droplet deployment.
 
 ## Provenance
 Restores and modernises the original SET implementation (canvas-drawn cards,
-`findAllSets`, found-sets list, timer, Socket.IO rooms) recovered into
-`recovered-src/`. The React + Redux client and the Socket.IO server are ported
+`findAllSets`, found-sets list, timer, native WebSocket rooms) recovered into
+`recovered-src/`. The React + Redux client and the native WebSocket server are ported
 to typed, tested TypeScript with the card design preserved pixel-for-pixel.

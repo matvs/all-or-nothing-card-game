@@ -21,7 +21,7 @@ function validName(name: unknown): name is string {
 
 /**
  * REST surface, mounted under /api. Everything else (realtime gameplay, chat,
- * voice signalling) runs over Socket.IO. Same-origin in production, so there is
+ * voice signalling) runs over a native WebSocket. Same-origin in production, so there is
  * no CORS to configure.
  */
 export function createApiRouter(registry: RoomRegistry): Router {

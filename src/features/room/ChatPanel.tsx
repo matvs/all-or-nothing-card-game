@@ -5,7 +5,7 @@ import { CHAT_MAX_LENGTH, type ChatMessage } from "../../../shared/protocol.js";
 
 /**
  * Room text chat. Renders the message log (author coloured by their seat) and a
- * send box. Messages travel over the same Socket.IO connection as the game.
+ * send box. Messages travel over the same WebSocket connection as the game.
  */
 export function ChatPanel({
   messages,

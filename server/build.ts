@@ -1,44 +1,39 @@
 import { createServer, type Server as HttpServer } from "node:http";
-import { Server as IoServer } from "socket.io";
-import type { ClientToServerEvents, ServerToClientEvents } from "../shared/protocol.js";
+import { WebSocketServer } from "ws";
 import { type AppOptions, createApp } from "./app.js";
 import type { RoomRegistry } from "./rooms/registry.js";
-import { SocketGateway } from "./socket.js";
+import { WsGateway } from "./socket.js";
 
 export interface BuiltServer {
   httpServer: HttpServer;
-  io: IoServer<ClientToServerEvents, ServerToClientEvents>;
+  wss: WebSocketServer;
   registry: RoomRegistry;
-  gateway: SocketGateway;
+  gateway: WsGateway;
   dispose(): void;
 }
 
 /**
- * Assemble the whole backend: Express (REST + static) + Socket.IO on the same
- * HTTP server and port. In production the browser hits one origin for the app,
- * the API and the WebSocket alike.
+ * Assemble the whole backend: Express (REST + static) + a NATIVE WebSocket
+ * server (the `ws` library) on the same HTTP server and port, upgrading only at
+ * `/ws`. In production the browser hits one origin for the app, the API and the
+ * WebSocket alike — no Socket.IO, no CORS.
  */
 export function buildServer(options: AppOptions = {}): BuiltServer {
   const { app, registry } = createApp(options);
   const httpServer = createServer(app);
 
-  const io = new IoServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
-    // Same-origin in prod; in dev the Vite proxy forwards /socket.io here, so no
-    // CORS is needed. Allow it explicitly only for local cross-port testing.
-    cors: process.env.NODE_ENV === "production" ? undefined : { origin: true, credentials: true },
-    maxHttpBufferSize: 1e6,
-  });
-
-  const gateway = new SocketGateway(io, registry);
+  // maxPayload caps a single frame (defence against oversized messages).
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws", maxPayload: 1e6 });
+  const gateway = new WsGateway(wss, registry);
 
   return {
     httpServer,
-    io,
+    wss,
     registry,
     gateway,
     dispose() {
       gateway.dispose();
-      io.close();
+      wss.close();
       registry.dispose();
     },
   };

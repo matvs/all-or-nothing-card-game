@@ -8,7 +8,7 @@ built.httpServer.listen(env.port, () => {
     ? "production (serving dist/)"
     : "development (frontend via Vite dev server)";
   console.log(
-    `[all-or-nothing SET] ${mode} — http://127.0.0.1:${env.port} (Socket.IO realtime, chat + WebRTC voice signalling)`,
+    `[all-or-nothing SET] ${mode} — http://127.0.0.1:${env.port} (native WebSocket realtime, chat + WebRTC voice signalling)`,
   );
 });
 

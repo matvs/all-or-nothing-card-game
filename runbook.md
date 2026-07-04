@@ -8,12 +8,12 @@ different. Faithful canvas-drawn card figures (a port of the recovered original
 
 - **Single-player** — twelve cards on the table, a running clock, find every set
   among them (cards stay put; found sets fill the side panel).
-- **Multiplayer** — a shared, **server-authoritative** board over **Socket.IO**;
+- **Multiplayer** — a shared, **server-authoritative** board over **native WebSockets**;
   coloured seats, live scores, coloured hand cursors, reconnect-with-token,
   **text chat**, and opt-in **WebRTC push-to-talk voice**.
 
 One Node service serves the built frontend, the REST API (`/api`) and the
-Socket.IO endpoint (`/socket.io`) on a single port, same-origin. Stateless:
+native WebSocket endpoint (`/ws`) on a single port, same-origin. Stateless:
 rooms are in-memory, there is no database and no AI.
 
 ## Prerequisites
@@ -23,7 +23,7 @@ rooms are in-memory, there is no database and no AI.
 
 ## Run locally (dev)
 Two processes (Vite for HMR + the tsx server); Vite proxies `/api` and
-`/socket.io` to the server so the browser stays same-origin (no CORS).
+`/ws` to the server so the browser stays same-origin (no CORS).
 
 ```bash
 npm install                 # first time (read-only npm cache? add --cache "$TMPDIR/npmcache")
@@ -39,7 +39,7 @@ npm run dev:server          # tsx watch server/index.ts (:8462)
 
 Tests / typecheck / build:
 ```bash
-npm test                    # 79 tests (engine + rooms + registry + REST + Socket.IO e2e)
+npm test                    # 79 tests (engine + rooms + registry + REST + WebSocket e2e)
 npm run typecheck           # tsc --noEmit
 npm run build               # vite build -> dist/
 ```
@@ -61,7 +61,7 @@ npm run verify:mp           # two isolated headless clients: seats, Start, a ser
 Note: chrome-headless-shell lacks `getUserMedia` and full ICE, so `verify:mp`
 exercises the voice **signalling handshake** (relayed offer/answer + push-to-talk
 toggle); live audio/ICE-`connected` works in a real browser and is covered by the
-unit + Socket.IO integration tests.
+unit + WebSocket integration tests.
 
 ## Run locally (docker)
 ```bash
@@ -93,7 +93,7 @@ The service publishes on `127.0.0.1:8462` only. From the Windows browser use
    sudo certbot --nginx -d allornothing.matvs.dev
    sudo nginx -t && sudo systemctl reload nginx
    ```
-   The vhost proxies `/` and `/api` normally and upgrades `/socket.io` to a
+   The vhost proxies `/` and `/api` normally and upgrades `/ws` to a
    WebSocket (the `map $http_upgrade $connection_upgrade` block is included).
 6. **Smoke test**:
    ```bash
@@ -114,10 +114,10 @@ The service publishes on `127.0.0.1:8462` only. From the Windows browser use
   and redeploy the previous image.
 
 ## Troubleshooting
-- **Multiplayer never connects / stuck reconnecting**: the `/socket.io`
+- **Multiplayer never connects / stuck reconnecting**: the `/ws`
   WebSocket upgrade is not reaching the container. Check the nginx
-  `location /socket.io` block and the `$connection_upgrade` map; confirm
-  `curl -I https://allornothing.matvs.dev/socket.io/` returns 400 (not 404).
+  `location /ws` block and the `$connection_upgrade` map; confirm
+  `curl -I https://allornothing.matvs.dev/ws` returns 400 (not 404).
 - **Voice won't connect across networks**: the mesh uses a public STUN server;
   strict/symmetric NATs need a TURN server (add it to `ICE_SERVERS` in
   `src/features/room/useVoice.ts`). Signalling still works; only media relay is

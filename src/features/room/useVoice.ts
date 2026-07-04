@@ -23,7 +23,7 @@ export interface UseVoice {
 const ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
 
 /**
- * A small WebRTC voice mesh over the room's Socket.IO signalling relay.
+ * A small WebRTC voice mesh over the room's native-WebSocket signalling relay.
  *
  * Push-to-talk: the mic track is added once but kept DISABLED, and only
  * enabled while the player holds the talk control. The newcomer always offers

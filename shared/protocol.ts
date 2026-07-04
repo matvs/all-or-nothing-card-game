@@ -1,11 +1,13 @@
 /**
  * Wire contract between the browser and the multiplayer server.
  *
- * Transport is Socket.IO (the original game's choice; kept deliberately — see
- * README "Why Socket.IO"). SET has no hidden information: the whole
- * board is public, so nothing here needs server-side redaction — every player
- * in a room sees the same board. Cards travel as their canonical 0..80 id;
- * rebuild them with cardFromId().
+ * Transport is NATIVE WebSockets (the `ws` library on the server, the browser's
+ * built-in WebSocket on the client) for lowest latency — no Socket.IO. Messages
+ * are a tiny JSON envelope `{ t: type, d: payload, id? }`; the event names below
+ * are the `t` values and the interfaces below are the `d` payloads. SET has no
+ * hidden information: the whole board is public, so nothing here needs
+ * server-side redaction — every player in a room sees the same board. Cards
+ * travel as their canonical 0..80 id; rebuild them with cardFromId().
  *
  * The design is SERVER-AUTHORITATIVE: the client never tells the server "I
  * scored"; it only asks "I claim these three card ids" and the server validates
@@ -110,17 +112,17 @@ export type JoinRoomResponse =
   | { id: string; error: true; errorCode: "roomDoesNotExist" };
 
 // ---------------------------------------------------------------------------
-// Socket.IO events
+// Realtime events (native WebSocket `t` values)
 // ---------------------------------------------------------------------------
 
-/** Handshake auth passed as io(url, { auth }). */
+/** Identity passed as URL query params on the WebSocket connect (?token&playerId&name). */
 export interface SocketAuth {
   token: string;
   playerId: string;
   name: string;
 }
 
-/** A claim result the server sends back to the claimer via callback. */
+/** A claim result the server sends back to the claimer as a request/ack reply. */
 export type ClaimAck =
   | { ok: true; cards: number[]; explanation: ExplanationRow[] }
   | {

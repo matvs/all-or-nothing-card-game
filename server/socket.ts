@@ -1,53 +1,101 @@
-import type { Server, Socket } from "socket.io";
+import type { IncomingMessage } from "node:http";
+import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import {
   CHAT_MAX_LENGTH,
-  type ClientToServerEvents,
-  type ServerToClientEvents,
+  type ClaimAck,
+  type RtcSignalData,
+  type SeatColor,
   START_COUNTDOWN_SECONDS,
 } from "../shared/protocol.js";
 import type { RoomRegistry } from "./rooms/registry.js";
 import type { Room } from "./rooms/room.js";
 
-interface SocketData {
+/** Per-connection state kept beside each raw WebSocket. */
+interface ConnData {
   playerId: string;
   name: string;
   rooms: Set<string>;
+  isAlive: boolean;
 }
 
-type AppServer = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
-type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
+interface Envelope {
+  t: string;
+  d?: unknown;
+  id?: number;
+}
 
-/** Room used to address every socket belonging to one player id. */
-const playerRoom = (playerId: string): string => `player:${playerId}`;
+const HEARTBEAT_MS = 30000;
 
 /**
- * Wires all realtime behaviour onto a Socket.IO server. Stateless beyond the
- * RoomRegistry: it just translates socket events into room-state mutations and
- * broadcasts, and relays WebRTC signalling between peers.
+ * Realtime gateway over NATIVE WebSockets (the `ws` library) — no Socket.IO, for
+ * lowest latency. Speaks a tiny JSON envelope `{ t: type, d: payload, id? }`;
+ * `id` marks a request that expects a single `{ t:"__ack", id, d }` reply (used
+ * by the server-authoritative claim). It owns room/player socket membership,
+ * broadcasts, WebRTC signalling relay, and a ping/pong heartbeat.
  */
-export class SocketGateway {
+export class WsGateway {
+  private readonly conns = new Map<WebSocket, ConnData>();
+  private readonly roomMembers = new Map<string, Set<WebSocket>>();
+  private readonly playerSockets = new Map<string, Set<WebSocket>>();
   private readonly countdowns = new Map<string, NodeJS.Timeout>();
-  /** playerId -> set of live socket ids (multi-tab / reconnect aware). */
-  private readonly connections = new Map<string, Set<string>>();
+  private readonly heartbeat: NodeJS.Timeout;
 
   constructor(
-    private readonly io: AppServer,
+    private readonly wss: WebSocketServer,
     private readonly registry: RoomRegistry,
   ) {
-    this.io.on("connection", (socket) => this.onConnection(socket));
+    this.wss.on("connection", (ws, req) => this.onConnection(ws, req));
+    this.heartbeat = setInterval(() => this.pingAll(), HEARTBEAT_MS);
   }
 
   dispose(): void {
+    clearInterval(this.heartbeat);
     for (const timer of this.countdowns.values()) clearInterval(timer);
     this.countdowns.clear();
+    for (const ws of this.wss.clients) ws.terminate();
   }
 
-  private onConnection(socket: AppSocket): void {
-    const auth = socket.handshake.auth as { token?: string; playerId?: string; name?: string };
+  // -- low-level send helpers ------------------------------------------------
+
+  private send(ws: WebSocket, t: string, d?: unknown): void {
+    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t, d }));
+  }
+
+  private ack(ws: WebSocket, id: number | undefined, d: unknown): void {
+    if (id !== undefined && ws.readyState === ws.OPEN) ws.send(JSON.stringify({ t: "__ack", id, d }));
+  }
+
+  /** Broadcast to every socket in a room (optionally excluding one). */
+  private broadcast(roomId: string, t: string, d: unknown, except?: WebSocket): void {
+    const members = this.roomMembers.get(roomId);
+    if (!members) return;
+    const raw = JSON.stringify({ t, d });
+    for (const ws of members) {
+      if (ws !== except && ws.readyState === ws.OPEN) ws.send(raw);
+    }
+  }
+
+  /** Send to every socket belonging to one player id (multi-tab aware). */
+  private toPlayer(playerId: string, t: string, d: unknown): void {
+    const sockets = this.playerSockets.get(playerId);
+    if (!sockets) return;
+    const raw = JSON.stringify({ t, d });
+    for (const ws of sockets) if (ws.readyState === ws.OPEN) ws.send(raw);
+  }
+
+  // -- connection lifecycle --------------------------------------------------
+
+  private onConnection(ws: WebSocket, req: IncomingMessage): void {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    const auth = {
+      token: url.searchParams.get("token") ?? undefined,
+      playerId: url.searchParams.get("playerId") ?? undefined,
+      name: url.searchParams.get("name") ?? undefined,
+    };
     const identity = this.registry.resolveIdentity(auth);
     if (!identity) {
       // Unknown/stale token (e.g. server restarted): ask the client to re-login.
-      socket.emit("room:state", {
+      this.send(ws, "room:state", {
         roomId: "",
         players: [],
         chat: [],
@@ -55,59 +103,103 @@ export class SocketGateway {
         voice: [],
         countdown: null,
       });
-      socket.disconnect(true);
+      ws.close();
       return;
     }
 
-    socket.data.playerId = identity.id;
-    socket.data.name = identity.name;
-    socket.data.rooms = new Set();
-    socket.join(playerRoom(identity.id));
-    this.track(identity.id, socket.id);
+    const data: ConnData = { playerId: identity.id, name: identity.name, rooms: new Set(), isAlive: true };
+    this.conns.set(ws, data);
+    this.track(identity.id, ws);
 
-    socket.on("room:join", (roomId) => this.onJoin(socket, roomId));
-    socket.on("room:sit", (msg) => this.onSit(socket, msg));
-    socket.on("game:start", (roomId) => this.onStart(socket, roomId));
-    socket.on("game:claim", (msg, ack) => this.onClaim(socket, msg, ack));
-    socket.on("chat:send", (msg) => this.onChat(socket, msg));
-    socket.on("cursor:move", (msg) => this.onCursor(socket, msg));
-    socket.on("voice:join", (roomId) => this.onVoiceJoin(socket, roomId));
-    socket.on("voice:leave", (roomId) => this.onVoiceLeave(socket, roomId));
-    socket.on("voice:signal", (msg) => this.onVoiceSignal(socket, msg));
-    socket.on("disconnect", () => this.onDisconnect(socket));
+    ws.on("message", (raw) => this.onMessage(ws, raw));
+    ws.on("pong", () => {
+      data.isAlive = true;
+    });
+    ws.on("close", () => this.onClose(ws));
+    ws.on("error", () => ws.terminate());
   }
 
-  // -- membership ----------------------------------------------------------
+  private onMessage(ws: WebSocket, raw: RawData): void {
+    let env: Envelope;
+    try {
+      env = JSON.parse(raw.toString()) as Envelope;
+    } catch {
+      return;
+    }
+    if (env.t === "__ping") {
+      this.send(ws, "__pong");
+      return;
+    }
+    const data = this.conns.get(ws);
+    if (!data) return;
 
-  private onJoin(socket: AppSocket, roomId: string): void {
-    if (!roomId || typeof roomId !== "string") return;
-    const room = this.registry.getOrCreateRoom(roomId);
-    const identity = { id: socket.data.playerId, name: socket.data.name, token: "" };
-    room.join(identity);
-    socket.join(roomId);
-    socket.data.rooms.add(roomId);
-
-    socket.emit("room:state", room.snapshot());
-    socket.to(roomId).emit("room:playerJoined", { id: identity.id, name: identity.name });
-    this.io.to(roomId).emit("room:players", room.roster());
-  }
-
-  private onSit(socket: AppSocket, msg: { roomId: string; color: import("../shared/protocol.js").SeatColor }): void {
-    const room = this.registry.getRoom(msg?.roomId);
-    if (!room) return;
-    if (room.sit(socket.data.playerId, msg.color)) {
-      this.io.to(room.id).emit("room:players", room.roster());
+    switch (env.t) {
+      case "room:join":
+        this.onJoin(ws, data, env.d as string);
+        break;
+      case "room:sit":
+        this.onSit(data, env.d as { roomId: string; color: SeatColor });
+        break;
+      case "game:start":
+        this.onStart(data, env.d as string);
+        break;
+      case "game:claim":
+        this.onClaim(ws, data, env.d as { roomId: string; cardIds: number[] }, env.id);
+        break;
+      case "chat:send":
+        this.onChat(data, env.d as { roomId: string; text: string });
+        break;
+      case "cursor:move":
+        this.onCursor(ws, data, env.d as { roomId: string; x: number; y: number });
+        break;
+      case "voice:join":
+        this.onVoiceJoin(ws, data, env.d as string);
+        break;
+      case "voice:leave":
+        this.onVoiceLeave(ws, data, env.d as string);
+        break;
+      case "voice:signal":
+        this.onVoiceSignal(data, env.d as { roomId: string; to: string; data: RtcSignalData });
+        break;
     }
   }
 
-  // -- game lifecycle ------------------------------------------------------
+  // -- membership ------------------------------------------------------------
 
-  private onStart(socket: AppSocket, roomId: string): void {
+  private onJoin(ws: WebSocket, data: ConnData, roomId: string): void {
+    if (!roomId || typeof roomId !== "string") return;
+    const room = this.registry.getOrCreateRoom(roomId);
+    room.join({ id: data.playerId, name: data.name, token: "" });
+
+    let members = this.roomMembers.get(roomId);
+    if (!members) {
+      members = new Set();
+      this.roomMembers.set(roomId, members);
+    }
+    members.add(ws);
+    data.rooms.add(roomId);
+
+    this.send(ws, "room:state", room.snapshot());
+    this.broadcast(roomId, "room:playerJoined", { id: data.playerId, name: data.name }, ws);
+    this.broadcast(roomId, "room:players", room.roster());
+  }
+
+  private onSit(data: ConnData, msg: { roomId: string; color: SeatColor }): void {
+    const room = this.registry.getRoom(msg?.roomId);
+    if (!room) return;
+    if (room.sit(data.playerId, msg.color)) {
+      this.broadcast(room.id, "room:players", room.roster());
+    }
+  }
+
+  // -- game lifecycle --------------------------------------------------------
+
+  private onStart(data: ConnData, roomId: string): void {
     const room = this.registry.getRoom(roomId);
     if (!room || room.isRunning) return;
 
-    const everyoneReady = room.markReady(socket.data.playerId);
-    this.io.to(room.id).emit("room:players", room.roster());
+    const everyoneReady = room.markReady(data.playerId);
+    this.broadcast(room.id, "room:players", room.roster());
     if (everyoneReady) {
       this.beginGame(room);
       return;
@@ -116,7 +208,7 @@ export class SocketGateway {
 
     let left = START_COUNTDOWN_SECONDS;
     room.countdown = left;
-    this.io.to(room.id).emit("game:countdown", left);
+    this.broadcast(room.id, "game:countdown", left);
     const timer = setInterval(() => {
       if (room.allSeatedReady()) {
         this.beginGame(room);
@@ -128,11 +220,11 @@ export class SocketGateway {
         clearInterval(timer);
         this.countdowns.delete(room.id);
         room.cancelStart();
-        this.io.to(room.id).emit("game:countdown", null);
-        this.io.to(room.id).emit("room:players", room.roster());
+        this.broadcast(room.id, "game:countdown", null);
+        this.broadcast(room.id, "room:players", room.roster());
         return;
       }
-      this.io.to(room.id).emit("game:countdown", left);
+      this.broadcast(room.id, "game:countdown", left);
     }, 1000);
     this.countdowns.set(room.id, timer);
   }
@@ -144,25 +236,26 @@ export class SocketGateway {
       this.countdowns.delete(room.id);
     }
     const state = room.begin();
-    this.io.to(room.id).emit("game:countdown", null);
-    this.io.to(room.id).emit("game:started", state);
-    this.io.to(room.id).emit("room:players", room.roster());
+    this.broadcast(room.id, "game:countdown", null);
+    this.broadcast(room.id, "game:started", state);
+    this.broadcast(room.id, "room:players", room.roster());
   }
 
   private onClaim(
-    socket: AppSocket,
+    ws: WebSocket,
+    data: ConnData,
     msg: { roomId: string; cardIds: number[] },
-    ack: (result: import("../shared/protocol.js").ClaimAck) => void,
+    reqId: number | undefined,
   ): void {
     const room = this.registry.getRoom(msg?.roomId);
     if (!room) {
-      ack?.({ ok: false, reason: "not-running", explanation: null });
+      this.ack(ws, reqId, { ok: false, reason: "not-running", explanation: null } satisfies ClaimAck);
       return;
     }
-    const outcome = room.claim(socket.data.playerId, msg.cardIds ?? []);
+    const outcome = room.claim(data.playerId, msg.cardIds ?? []);
     if (outcome.ok) {
-      ack?.({ ok: true, cards: outcome.cards, explanation: outcome.explanation });
-      this.io.to(room.id).emit("game:claimAccepted", {
+      this.ack(ws, reqId, { ok: true, cards: outcome.cards, explanation: outcome.explanation } satisfies ClaimAck);
+      this.broadcast(room.id, "game:claimAccepted", {
         playerId: outcome.player.id,
         name: outcome.player.name,
         color: outcome.player.color,
@@ -170,107 +263,120 @@ export class SocketGateway {
         explanation: outcome.explanation,
         points: outcome.player.points,
       });
-      this.io.to(room.id).emit("game:board", room.gameState());
-      // Re-broadcast the roster so every client's scoreboard reflects the point.
-      this.io.to(room.id).emit("room:players", room.roster());
+      this.broadcast(room.id, "game:board", room.gameState());
+      this.broadcast(room.id, "room:players", room.roster());
       if (room.isOver()) {
-        this.io.to(room.id).emit("game:over", { players: room.roster(), winnerIds: room.winnerIds() });
+        this.broadcast(room.id, "game:over", { players: room.roster(), winnerIds: room.winnerIds() });
       }
     } else {
-      ack?.({ ok: false, reason: outcome.reason, explanation: outcome.explanation });
+      this.ack(ws, reqId, { ok: false, reason: outcome.reason, explanation: outcome.explanation } satisfies ClaimAck);
       if (outcome.player) {
-        this.io.to(room.id).emit("game:claimRejected", {
+        this.broadcast(room.id, "game:claimRejected", {
           playerId: outcome.player.id,
           points: outcome.player.points,
         });
-        // Penalty applied — refresh the scoreboard for everyone.
-        this.io.to(room.id).emit("room:players", room.roster());
+        this.broadcast(room.id, "room:players", room.roster());
       }
     }
   }
 
-  // -- chat ----------------------------------------------------------------
+  // -- chat ------------------------------------------------------------------
 
-  private onChat(socket: AppSocket, msg: { roomId: string; text: string }): void {
+  private onChat(data: ConnData, msg: { roomId: string; text: string }): void {
     const room = this.registry.getRoom(msg?.roomId);
     if (!room) return;
     const text = String(msg.text ?? "").trim().slice(0, CHAT_MAX_LENGTH);
     if (!text) return;
-    const message = room.addChat(socket.data.playerId, text);
-    if (message) this.io.to(room.id).emit("chat:message", message);
+    const message = room.addChat(data.playerId, text);
+    if (message) this.broadcast(room.id, "chat:message", message);
   }
 
-  // -- cursors -------------------------------------------------------------
+  // -- cursors ---------------------------------------------------------------
 
-  private onCursor(socket: AppSocket, msg: { roomId: string; x: number; y: number }): void {
+  private onCursor(ws: WebSocket, data: ConnData, msg: { roomId: string; x: number; y: number }): void {
     const room = this.registry.getRoom(msg?.roomId);
     if (!room) return;
-    const color = room.setCursor(socket.data.playerId, msg.x, msg.y);
-    socket.to(room.id).emit("cursor:update", { playerId: socket.data.playerId, color, x: msg.x, y: msg.y });
+    const color = room.setCursor(data.playerId, msg.x, msg.y);
+    this.broadcast(room.id, "cursor:update", { playerId: data.playerId, color, x: msg.x, y: msg.y }, ws);
   }
 
-  // -- voice (WebRTC signalling relay) -------------------------------------
+  // -- voice (WebRTC signalling relay) ---------------------------------------
 
-  private onVoiceJoin(socket: AppSocket, roomId: string): void {
+  private onVoiceJoin(ws: WebSocket, data: ConnData, roomId: string): void {
     const room = this.registry.getRoom(roomId);
-    if (!room || !room.has(socket.data.playerId)) return;
-    const peers = room.voiceJoin(socket.data.playerId);
+    if (!room || !room.has(data.playerId)) return;
+    const peers = room.voiceJoin(data.playerId);
     // Newcomer receives the current peers and initiates offers to each.
-    socket.emit("voice:peers", peers);
+    this.send(ws, "voice:peers", peers);
   }
 
-  private onVoiceLeave(socket: AppSocket, roomId: string): void {
+  private onVoiceLeave(ws: WebSocket, data: ConnData, roomId: string): void {
     const room = this.registry.getRoom(roomId);
     if (!room) return;
-    room.voiceLeave(socket.data.playerId);
-    socket.to(room.id).emit("voice:peerLeft", socket.data.playerId);
+    room.voiceLeave(data.playerId);
+    this.broadcast(room.id, "voice:peerLeft", data.playerId, ws);
   }
 
   private onVoiceSignal(
-    socket: AppSocket,
-    msg: { roomId: string; to: string; data: import("../shared/protocol.js").RtcSignalData },
+    data: ConnData,
+    msg: { roomId: string; to: string; data: RtcSignalData },
   ): void {
     const room = this.registry.getRoom(msg?.roomId);
     if (!room || !room.has(msg.to)) return;
-    // Relay to every socket of the target player.
-    this.io.to(playerRoom(msg.to)).emit("voice:signal", { from: socket.data.playerId, data: msg.data });
+    this.toPlayer(msg.to, "voice:signal", { from: data.playerId, data: msg.data });
   }
 
-  // -- disconnect / reconnection ------------------------------------------
+  // -- disconnect / reconnection --------------------------------------------
 
-  private onDisconnect(socket: AppSocket): void {
-    const playerId = socket.data.playerId;
-    if (!playerId) return;
-    const stillConnected = this.untrack(playerId, socket.id);
+  private onClose(ws: WebSocket): void {
+    const data = this.conns.get(ws);
+    this.conns.delete(ws);
+    if (!data) return;
+
+    for (const roomId of data.rooms) this.roomMembers.get(roomId)?.delete(ws);
+
+    const stillConnected = this.untrack(data.playerId, ws);
     if (stillConnected) return; // another tab keeps the player online
 
-    for (const roomId of socket.data.rooms) {
+    for (const roomId of data.rooms) {
       const room = this.registry.getRoom(roomId);
       if (!room) continue;
-      room.markOffline(playerId);
-      this.io.to(roomId).emit("room:players", room.roster());
-      this.io.to(roomId).emit("voice:peerLeft", playerId);
+      room.markOffline(data.playerId);
+      this.broadcast(roomId, "room:players", room.roster());
+      this.broadcast(roomId, "voice:peerLeft", data.playerId);
     }
   }
 
-  private track(playerId: string, socketId: string): void {
-    let set = this.connections.get(playerId);
+  private track(playerId: string, ws: WebSocket): void {
+    let set = this.playerSockets.get(playerId);
     if (!set) {
       set = new Set();
-      this.connections.set(playerId, set);
+      this.playerSockets.set(playerId, set);
     }
-    set.add(socketId);
+    set.add(ws);
   }
 
   /** Remove a socket; return true if the player still has another socket. */
-  private untrack(playerId: string, socketId: string): boolean {
-    const set = this.connections.get(playerId);
+  private untrack(playerId: string, ws: WebSocket): boolean {
+    const set = this.playerSockets.get(playerId);
     if (!set) return false;
-    set.delete(socketId);
+    set.delete(ws);
     if (set.size === 0) {
-      this.connections.delete(playerId);
+      this.playerSockets.delete(playerId);
       return false;
     }
     return true;
+  }
+
+  private pingAll(): void {
+    for (const ws of this.wss.clients) {
+      const data = this.conns.get(ws);
+      if (data && data.isAlive === false) {
+        ws.terminate();
+        continue;
+      }
+      if (data) data.isAlive = false;
+      ws.ping();
+    }
   }
 }

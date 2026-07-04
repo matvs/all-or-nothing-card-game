@@ -55,7 +55,7 @@ export interface UseRoom {
 }
 
 /**
- * Owns the realtime room: joins over Socket.IO, mirrors the SERVER-AUTHORITATIVE
+ * Owns the realtime room: joins over a native WebSocket, mirrors the SERVER-AUTHORITATIVE
  * game state (roster, board, countdown, scores), and turns local card picks into
  * `game:claim` requests the server validates. Also relays cursor movements so
  * everyone sees each other's coloured hands.
