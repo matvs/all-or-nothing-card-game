@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # ---------------------------------------------------------------------------
 # All or Nothing (SET) — one Node service serving the built frontend AND the
-# REST + STOMP-over-WebSocket API on a single port (default 8462), same-origin.
+# REST + Socket.IO API on a single port (default 8462), same-origin.
 #
 # glibc base (node:22-bookworm-slim) per the WSL2 deployment doctrine. There is
 # NO native module and NO database: multiplayer rooms live in memory and solo

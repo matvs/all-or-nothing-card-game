@@ -1,28 +1,32 @@
 # Runbook — all-or-nothing-card-game (SET)
 
 ## What is this
-A SET card game: find sets of three cards where, for each of four attributes
-(colour, shape, number, shading), the three cards are all the same or all
-different. Canvas-rendered card tiles in a Bootstrap 5.3 interface. Two
-ways to play: **solo** (relaxed or timed, three difficulties, hints,
-localStorage high scores) and a real-time **multiplayer race** where everyone
-competes on the same board — first to claim a valid set scores it and three
-fresh cards drop in. Realtime transport is **STOMP over WebSocket**. One Node
-service serves the built frontend, the REST API and the STOMP endpoint on a
-single port, same-origin. Stateless: rooms are in-memory, solo scores live in
-the browser. No database, no AI.
+A SET card game: find sets of three cards where, for each of four features
+(colour, shape, filling, number), the three cards are all the same or all
+different. Faithful canvas-drawn card figures (a port of the recovered original
+`Card.js`) in a Bootstrap 5.3 interface. Two ways to play:
+
+- **Single-player** — twelve cards on the table, a running clock, find every set
+  among them (cards stay put; found sets fill the side panel).
+- **Multiplayer** — a shared, **server-authoritative** board over **Socket.IO**;
+  coloured seats, live scores, coloured hand cursors, reconnect-with-token,
+  **text chat**, and opt-in **WebRTC push-to-talk voice**.
+
+One Node service serves the built frontend, the REST API (`/api`) and the
+Socket.IO endpoint (`/socket.io`) on a single port, same-origin. Stateless:
+rooms are in-memory, there is no database and no AI.
 
 ## Prerequisites
-- Local: Node >= 20 (developed on 24), npm. No native modules, no DB.
+- Local: Node >= 20, npm. No native modules, no DB.
 - Droplet: Docker Engine + docker compose v2, host nginx + certbot, DNS access
   for `matvs.dev` (see apps/ORCHESTRATION.md and apps/DEPLOYMENT-WSL2.md).
 
 ## Run locally (dev)
-Two processes (Vite for HMR + the API/STOMP server); Vite proxies `/api` and
-`/stomp` to the server so the browser stays same-origin (no CORS).
+Two processes (Vite for HMR + the tsx server); Vite proxies `/api` and
+`/socket.io` to the server so the browser stays same-origin (no CORS).
 
 ```bash
-npm install                 # first time (if the npm cache is read-only: npm install --cache "$TMPDIR/npmcache")
+npm install                 # first time (read-only npm cache? add --cache "$TMPDIR/npmcache")
 npm run dev                 # vite on :5173 + tsx server on :8462
 # open http://localhost:5173
 ```
@@ -35,16 +39,29 @@ npm run dev:server          # tsx watch server/index.ts (:8462)
 
 Tests / typecheck / build:
 ```bash
-npm test                    # 45 unit + integration tests (engine + server + STOMP e2e)
+npm test                    # 79 tests (engine + rooms + registry + REST + Socket.IO e2e)
 npm run typecheck           # tsc --noEmit
 npm run build               # vite build -> dist/
 ```
 
-Optional visual check (uses the sandbox chrome-headless-shell):
+## Verify in a real browser (headless Chrome)
+Both scripts start the production server **in-process** (serving `dist/`) and
+drive the sandbox's chrome-headless-shell — no separate server needed.
+
 ```bash
-npm run build && npm run preview &                   # prod server on :8462 serving dist/
-SHOT_URL=http://127.0.0.1:8462 npm run screenshot    # writes PNGs to $TMPDIR/set-shots
+npm run build
+npm run screenshot          # single-player tableau (light/dark/selected/hover);
+                            # ASSERTS the three exact colours #4B0082/#228B22/#DC143C
+                            # are painted. PNGs in $TMPDIR/set-shots.
+npm run verify:mp           # two isolated headless clients: seats, Start, a server-
+                            # validated claim scored on BOTH clients, chat both ways,
+                            # and the WebRTC voice signalling handshake + push-to-talk.
 ```
+
+Note: chrome-headless-shell lacks `getUserMedia` and full ICE, so `verify:mp`
+exercises the voice **signalling handshake** (relayed offer/answer + push-to-talk
+toggle); live audio/ICE-`connected` works in a real browser and is covered by the
+unit + Socket.IO integration tests.
 
 ## Run locally (docker)
 ```bash
@@ -64,8 +81,7 @@ The service publishes on `127.0.0.1:8462` only. From the Windows browser use
      ./ root@<droplet>:/opt/allornothing/
    ```
 3. **.env** — none required. The only knobs are `PORT` (default 8462) and
-   `NODE_ENV=production` (already set in the image/compose). There is no
-   database and no AI provider to configure.
+   `NODE_ENV=production` (already set in the image/compose). No database, no AI.
 4. **Build & run**:
    ```bash
    cd /opt/allornothing && docker compose up -d --build
@@ -77,37 +93,41 @@ The service publishes on `127.0.0.1:8462` only. From the Windows browser use
    sudo certbot --nginx -d allornothing.matvs.dev
    sudo nginx -t && sudo systemctl reload nginx
    ```
-   The vhost proxies `/` and `/api` normally and upgrades `/stomp` to a
+   The vhost proxies `/` and `/api` normally and upgrades `/socket.io` to a
    WebSocket (the `map $http_upgrade $connection_upgrade` block is included).
 6. **Smoke test**:
    ```bash
-   curl -s https://allornothing.matvs.dev/api/health         # {"ok":true,"rooms":0}
+   curl -s https://allornothing.matvs.dev/api/health                 # {"ok":true,"rooms":0}
    curl -s -XPOST -H 'content-type: application/json' \
-     -d '{"name":"Ada"}' https://allornothing.matvs.dev/api/rooms   # {code,playerId,token}
+     -d '{"name":"Ada"}' https://allornothing.matvs.dev/api/login    # {id,name,token}
    ```
-   Then open the site, create a room, open the printed code in a second
-   browser/incognito, Start, and race.
+   Then open the site, log in, create a room, open the printed code in a second
+   browser/incognito, take seats, Start, and race.
 
 ## Operations
 - **Logs**: `docker compose logs -f app`.
 - **Health**: `GET /api/health` (also the container HEALTHCHECK).
 - **Backup/restore**: nothing to back up — the app is stateless (in-memory
-  rooms, browser-side solo scores). Empty idle rooms are swept after 30 min.
+  rooms, browser-side solo state).
 - **Upgrade**: `git pull` (or rsync) then `docker compose up -d --build`.
 - **Rollback**: `git checkout <prev>` then rebuild; or `docker compose down`
   and redeploy the previous image.
 
 ## Troubleshooting
-- **Multiplayer never connects / status stuck on "Reconnecting..."**: the
-  `/stomp` WebSocket upgrade is not reaching the container. Check the nginx
-  `location /stomp` block and the `$connection_upgrade` map; confirm
-  `curl -I https://allornothing.matvs.dev/stomp` returns 400/426 (not 404).
-- **CORS errors in the console**: you opened the Vite port in production
-  instead of the server port. In prod the Node server serves the frontend on
-  the same origin; open `:8462` (or the domain), not `:5173`.
+- **Multiplayer never connects / stuck reconnecting**: the `/socket.io`
+  WebSocket upgrade is not reaching the container. Check the nginx
+  `location /socket.io` block and the `$connection_upgrade` map; confirm
+  `curl -I https://allornothing.matvs.dev/socket.io/` returns 400 (not 404).
+- **Voice won't connect across networks**: the mesh uses a public STUN server;
+  strict/symmetric NATs need a TURN server (add it to `ICE_SERVERS` in
+  `src/features/room/useVoice.ts`). Signalling still works; only media relay is
+  affected.
+- **CORS errors in the console**: you opened the Vite port in production instead
+  of the server port. In prod the Node server serves the frontend on the same
+  origin; open `:8462` (or the domain), not `:5173`.
 - **`npm ci` fails in Docker**: the lockfile must match package.json. Run
   `npm install` locally to refresh `package-lock.json`, commit, redeploy.
 - **Port already in use**: something else holds 8462 — change `PORT` in
   `docker-compose.yml` AND the nginx `proxy_pass`, or free the port.
-- **Cards look blurry**: the canvas is DPI-aware and re-paints on resize; a
-  hard refresh clears any stale cached bundle.
+- **Cards look blurry**: the canvas is DPI-aware and re-paints on resize; a hard
+  refresh clears any stale cached bundle.

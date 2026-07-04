@@ -1,95 +1,112 @@
 # All or Nothing — SET
 
-A **SET** card game. Every card has four features, each with three possible
-values:
+A **SET** card game, faithfully restored from the owner's original
+(`boardgames.matvs.dev`) and ported to typed, tested TypeScript. Every card has
+four features, each with three values:
 
-- **colour** — red · green · purple
+- **colour** — purple `#4B0082` · green `#228B22` · crimson `#DC143C`
 - **shape** — square · circle · triangle
+- **filling** — none (outline) · full (solid) · dashed (striped)
 - **number** — one · two · three symbols
-- **shading** — open (outline) · solid · striped
 
 The 3⁴ combinations make an **81-card deck**. Three cards form a **set** when,
 *for every one of the four features*, the values are **all the same or all
-different**. Find them faster than everyone else.
+different**.
 
-Canvas-drawn card tiles (the original game's aesthetic, preserved) in a
-**Bootstrap 5.3** interface — navbar, cards, buttons, grid and badges, light
-and dark (`data-bs-theme`), DPI-aware, keyboard-navigable, screen-reader
-announced.
+The card figures are a **pixel-faithful** port of the original
+`features/gameCanvas/Card.js`: each card paints its symbols on its own
+DPI-aware `<canvas>` — sharp 40px squares, r=20 circles, equilateral triangles,
+symbols laid out **horizontally**, the "dashed" filling rendered as the
+original's fine horizontal stripes — wrapped in CSS card chrome that provides
+the white tile, the black border, the **hover-pop** (lift + scale) and the
+`#02075d` selected highlight. Bootstrap 5.3 UI, light/dark (`data-bs-theme`),
+keyboard- and screen-reader-friendly.
 
 ## Play
 
-**Solo** — a board of 12 cards that grows by three whenever no set is present
-(the classic "deal until a set exists" rule). Claim sets to score; three fresh
-cards replace each claimed set.
+**Single-player** — twelve cards on the table and a running clock. Find *every*
+set among them: cards stay put, each found set fills the side panel with its
+three figures and an Explanation table, and finding them all wins. Wrong picks
+show *why* (the NO/NO row). This mirrors the recovered `GameCanvasSingleplayer`.
 
-- **Relaxed** — no clock; race your best clear time.
-- **Timed** — three minutes; find as many as you can.
-- **Difficulty** — *Easy* trims the deck to a single shading (a gentler
-  three-feature game), *Normal* is the full deck, *Hard* drops the hints.
-- Hints (reveal up to two cards of a real set), a "Deal 3" that only fires when
-  the board genuinely has no set (so it teaches the rule), a found-sets list
-  with canvas thumbnails, and high scores saved in your browser.
+**Multiplayer** — a shared, **server-authoritative** board. Log in, create or
+join a room by its 4-letter code, take a coloured seat, and press Start (a round
+begins once the seated players are ready or the countdown ends). Everyone races
+on the *same* board; the first to claim a valid set scores it and fresh cards
+drop in; a wrong claim costs a point. Live scoreboard, each player's **coloured
+hand cursor**, and reconnect-with-token that keeps your seat and score.
 
-**Multiplayer race** — everyone plays the *same* board over **STOMP on a
-WebSocket**. First to claim a valid set scores it and three new cards drop in;
-the board and scores update live for the whole room. Share the **4-letter room
-code**, reconnect with your token if your connection blips. Set validation is
-**server-authoritative** — the browser asks, the server decides.
+- **Text chat** — over the same Socket.IO connection, authors coloured by seat.
+- **Voice chat** — an opt-in **WebRTC** mesh with **push-to-talk** (hold the
+  button or Space); signalling is relayed by the server, audio is peer-to-peer.
 
 ## Architecture
 
-One Node service serves the built frontend, the REST API and the STOMP
-endpoint on a single port (8462), **same-origin** so there is no CORS. The game
-logic is a pure, framework-free TypeScript engine shared verbatim by the client
-and the server.
+One Node service serves the built frontend, the REST API (`/api`) and the
+Socket.IO endpoint (`/socket.io`) on a single port (8462), **same-origin** so
+there is no CORS. The SET engine is a pure, framework-free TypeScript module
+shared verbatim by client and server, so the server can authoritatively
+validate every claim.
 
 ```
-shared/engine/   Pure SET logic: 81-card deck, seedable RNG, isSet (via the
-                 (a+b+c) % 3 identity), findAllSets/hasSet/thirdCard, and a
-                 Tableau state machine (deal-until-set, in-place claim/replace).
-shared/protocol  Client/server wire contract + STOMP destinations.
-src/render/      <set-card> custom element painting a card face on its own
-                 DPI-aware canvas; palette; thumbnails.
-src/game/        Solo game controller + localStorage high scores.
-src/ui/          Bootstrap-based UI helpers, screens (home, solo, race), board.
-src/net/         @stomp/stompjs client wrapper.
-server/stomp/    A compact STOMP 1.2 codec + broker over `ws`.
-server/rooms/    Room (shared tableau, scores, host, reconnect), registry,
-                 and the service wiring STOMP destinations to room actions.
-server/http/     REST: create/join room, room summary, health.
+shared/engine/    Pure SET logic: 81-card deck, seedable RNG, isSet (via the
+                  (a+b+c) % 3 identity), findAllSets / hasSet / thirdCard,
+                  the Tableau state machine (deal-until-set, claim/replace),
+                  and the Explanation builder. Exhaustively tested.
+shared/protocol   Socket.IO wire contract (events, seat colours, payloads).
+src/game/         cardFace.ts — the faithful canvas port of Card.js; SetCard /
+                  Board tiles; the single-player game (useSinglePlayerGame).
+src/features/     mainPage, session (Redux slice + thunks), modals (login /
+                  create / join), alert bar, and room/ (the multiplayer UI).
+src/features/room useRoom (game socket), RoomPage, ChatPanel, VoiceBar +
+                  useVoice (WebRTC mesh), handCursor.
+src/app/          Redux Toolkit store + typed hooks.
+src/net/          Socket.IO client singleton (identity in the handshake auth).
+server/           Express app + static (app.ts), SocketGateway (socket.ts),
+                  rooms/ (Room shared state + RoomRegistry), http/api.ts (REST),
+                  build.ts (HTTP + Socket.IO wiring), index.ts (entrypoint).
 ```
 
-### Why STOMP
-The owner asked for STOMP specifically. Rather than pull in a heavyweight
-broker, the server implements just enough of **STOMP 1.2** (CONNECT auth,
-SUBSCRIBE/SEND/UNSUBSCRIBE, MESSAGE publish to topics and private per-connection
-replies) over the `ws` library — a few hundred lines, fully unit-tested and
-**wire-compatible with `@stomp/stompjs`** on the browser. Rooms broadcast state
-on `/topic/room/{CODE}`; clients send actions to `/app/room/{CODE}/{action}`;
-private rejections come back on `/user/queue/reply`.
+### Why Socket.IO
+The original game used Socket.IO; it is kept deliberately. SET has no hidden
+information — the whole board is public — so nothing needs server-side
+redaction; every player in a room sees the same board. Cards travel as their
+canonical `0..80` id (rebuild with `cardFromId`). The design is
+**server-authoritative**: the client never says "I scored", it only asks "I
+claim these three ids" and the server validates against the real board before
+awarding a point and dealing on.
 
 ## Develop
 
 ```bash
 npm install
-npm run dev        # Vite (:5173, HMR) + tsx API/STOMP server (:8462); open :5173
-npm test           # 45 tests: engine, rooms, STOMP codec, REST, full STOMP e2e
-npm run typecheck
-npm run build      # -> dist/
+npm run dev         # Vite (:5173, HMR) + tsx server (:8462); open :5173
+npm test            # 79 tests: engine, rooms, registry, REST, Socket.IO e2e
+npm run typecheck   # tsc --noEmit
+npm run build       # -> dist/
 docker compose up -d --build   # one container on 127.0.0.1:8462
 ```
 
-The SET engine is verified exhaustively: `isSet` is proven equivalent to the
-original "all same or all different" rule across all C(81,3) = 85 320 triples
-(exactly 1080 sets), the deal guarantee holds across 500 seeds, and a full game
-plays to exhaustion without ever dealing a card twice.
+### Verify (real browser, headless Chrome)
 
-See **runbook.md** for deployment to the DigitalOcean droplet.
+```bash
+npm run build
+npm run screenshot  # starts the server in-process, screenshots the single-player
+                    # tableau (light/dark/selected/hover) AND asserts the three
+                    # exact colours #4B0082/#228B22/#DC143C are actually painted.
+npm run verify:mp   # two isolated headless clients: seats, start, a server-
+                    # validated claim scored on BOTH clients, text chat both ways,
+                    # and the WebRTC voice signalling handshake + push-to-talk.
+```
+
+The SET engine is verified exhaustively (`isSet` proven equivalent to
+"all-same-or-all-different" across all triples; the deal guarantee holds across
+many seeds; a full game plays to exhaustion without dealing a card twice).
+
+See **runbook.md** for droplet deployment.
 
 ## Provenance
-This restores and modernises the original SET implementation (canvas-drawn
-cards, `findAllSets`, found-sets list, timer) that lived at commit `9b7cf09`.
-The 2019 vanilla-JS core was ported to typed, tested TypeScript with behaviour
-preserved; the UI is built with Bootstrap 5.3; and the single "there are N
-sets" alert grew into solo modes plus a real-time multiplayer race.
+Restores and modernises the original SET implementation (canvas-drawn cards,
+`findAllSets`, found-sets list, timer, Socket.IO rooms) recovered into
+`recovered-src/`. The React + Redux client and the Socket.IO server are ported
+to typed, tested TypeScript with the card design preserved pixel-for-pixel.

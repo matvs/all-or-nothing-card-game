@@ -1,4 +1,4 @@
-# All or Nothing (SET) — one Node service serving the frontend + REST + STOMP.
+# All or Nothing (SET) — one Node service serving the frontend + REST + Socket.IO.
 # Published on 127.0.0.1:8462 ONLY (loopback); the droplet's host nginx
 # terminates TLS and proxies to it (see nginx/allornothing.matvs.dev.conf).
 # Stateless: multiplayer rooms are in-memory, solo scores are in localStorage,

@@ -2,7 +2,7 @@
  * Wire contract between the browser and the multiplayer server.
  *
  * Transport is Socket.IO (the original game's choice; kept deliberately — see
- * README "Why Socket.IO over STOMP"). SET has no hidden information: the whole
+ * README "Why Socket.IO"). SET has no hidden information: the whole
  * board is public, so nothing here needs server-side redaction — every player
  * in a room sees the same board. Cards travel as their canonical 0..80 id;
  * rebuild them with cardFromId().
