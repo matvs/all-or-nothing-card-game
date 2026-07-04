@@ -3,7 +3,8 @@ import { estimateBid } from "../../src/ai/bid.js";
 import { chooseCard } from "../../src/ai/play.js";
 import type { AiContext, Difficulty } from "../../src/ai/types.js";
 import { parseCardId } from "../../src/engine/deck.js";
-import { createMatch, getForbiddenBid, getWinners, placeBid, playCard } from "../../src/engine/match.js";
+import { createMatch, getWinners, placeBid, playCard } from "../../src/engine/match.js";
+import { toClientMatchView } from "../../shared/views.js";
 import type { RngFn } from "../../src/engine/rng.js";
 import { randomSeed } from "../../src/engine/rng.js";
 import type { EngineError, MatchState, SeatIndex } from "../../src/engine/types.js";
@@ -12,7 +13,6 @@ import {
   CHAT_HISTORY_LIMIT,
   type ChatMessage,
   type ClientMatchView,
-  type ClientRoundView,
   type RoomPhase,
   type RoomSettings,
   type RoomSnapshot,
@@ -502,41 +502,7 @@ export class Room {
   }
 
   toMatchView(forSeat: SeatIndex | null): ClientMatchView | null {
-    if (!this.match) return null;
-    const m = this.match;
-    const round = m.round;
-    let roundView: ClientRoundView | null = null;
-    if (round) {
-      const handCounts = Object.fromEntries(SEAT_INDICES.map((s) => [s, round.hands[s].length])) as Record<SeatIndex, number>;
-      roundView = {
-        roundNumber: round.roundNumber,
-        handSize: round.handSize,
-        trump: round.trump,
-        trumpCard: round.trumpCard,
-        dealer: round.dealer,
-        yourHand: forSeat !== null ? round.hands[forSeat] : null,
-        handCounts,
-        biddingOrder: [...round.biddingOrder],
-        bids: { ...round.bids },
-        nextBidder: round.nextBidder,
-        currentTrick: [...round.currentTrick],
-        trickLeader: round.trickLeader,
-        nextPlayer: round.nextPlayer,
-        tricksWon: { ...round.tricksWon },
-        lastCompletedTrick: round.completedTricks.at(-1) ?? null,
-        phase: round.phase,
-        forbiddenBid: getForbiddenBid(round, m.settings),
-      };
-    }
-    return {
-      roundSequence: [...m.roundSequence],
-      roundIndex: m.roundIndex,
-      totalScores: { ...m.totalScores },
-      history: m.history,
-      round: roundView,
-      phase: m.phase,
-      settings: m.settings,
-    };
+    return this.match ? toClientMatchView(this.match, forSeat) : null;
   }
 
   // --------------------------------------------------------- broadcasting
