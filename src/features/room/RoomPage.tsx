@@ -12,6 +12,7 @@ import type { RoomPlayer } from "../../../shared/protocol.js";
 import { ExplanationTable } from "../../components/ExplanationTable.js";
 import { FoundSetsPanel } from "../../components/FoundSetsPanel.js";
 import { Board } from "../../game/Board.js";
+import { ChatPanel } from "./ChatPanel.js";
 import { handCursorDataUri } from "./handCursor.js";
 import { useRoom } from "./useRoom.js";
 
@@ -199,6 +200,10 @@ export function RoomPage() {
         </Col>
 
         <Col lg={5}>
+          <div className="mb-3">
+            <h2 className="h5 mb-2">Chat</h2>
+            <ChatPanel messages={room.chat} onSend={room.sendChat} />
+          </div>
           <FoundSetsPanel sets={room.found} />
         </Col>
       </Row>

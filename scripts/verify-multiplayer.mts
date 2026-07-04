@@ -164,6 +164,24 @@ async function main(): Promise<void> {
     assert(foundCount >= 1, "Bob's 'found sets' panel shows Alice's claimed set");
     await pageA.screenshot({ path: path.join(OUT, "race-after-claim.png") as `${string}.png` });
 
+    // Chat: Bob sends a message, Alice receives it over the same socket.
+    await pageB.type(".chat__form input", "gg Alice!");
+    assert(await clickButtonWithText(pageB, "Send"), "Bob sent a chat message");
+    await pageA.waitForFunction(
+      () => (document.querySelector(".chat__log")?.textContent ?? "").includes("gg Alice!"),
+      { timeout: 8000 },
+    );
+    assert(true, "Alice received Bob's chat message");
+    await pageA.type(".chat__form input", "well played :)");
+    await clickButtonWithText(pageA, "Send");
+    await pageB.waitForFunction(
+      () => (document.querySelector(".chat__log")?.textContent ?? "").includes("well played"),
+      { timeout: 8000 },
+    );
+    assert(true, "Bob received Alice's reply");
+    await wait(200);
+    await pageA.screenshot({ path: path.join(OUT, "race-chat.png") as `${string}.png` });
+
     console.log("\nMULTIPLAYER E2E PASSED — screenshots in", OUT);
   } finally {
     await browser.close();

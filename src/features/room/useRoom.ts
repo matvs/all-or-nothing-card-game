@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Card, type ExplanationRow, cardFromId } from "../../../shared/engine/index.js";
 import type {
+  ChatMessage,
   ClaimAck,
   GameState,
   RoomPlayer,
@@ -44,10 +45,12 @@ export interface UseRoom {
   statuses: ReadonlyMap<number, CardStatus>;
   alert: RoomAlert;
   gameOver: { players: RoomPlayer[]; winnerIds: string[] } | null;
+  chat: ChatMessage[];
   sit: (color: SeatColor) => void;
   start: () => void;
   activateCard: (cardId: number) => void;
   onPointerMove: (x: number, y: number) => void;
+  sendChat: (text: string) => void;
   clearGameOver: () => void;
 }
 
@@ -68,6 +71,7 @@ export function useRoom(roomId: string): UseRoom {
   const [statuses, setStatuses] = useState<Map<number, CardStatus>>(new Map());
   const [alert, setAlert] = useState<RoomAlert>({ kind: "info" });
   const [gameOver, setGameOver] = useState<{ players: RoomPlayer[]; winnerIds: string[] } | null>(null);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
 
   const locked = useRef(false);
   const flashTimer = useRef<number | null>(null);
@@ -85,6 +89,7 @@ export function useRoom(roomId: string): UseRoom {
       setPlayers(snap.players);
       setGame(snap.game);
       setCountdown(snap.countdown);
+      setChat(snap.chat);
     };
     const onPlayers = (list: RoomPlayer[]) => setPlayers(list);
     const onCountdown = (secondsLeft: number | null) => setCountdown(secondsLeft);
@@ -132,6 +137,7 @@ export function useRoom(roomId: string): UseRoom {
         return next;
       });
     };
+    const onChat = (message: ChatMessage) => setChat((prev) => [...prev, message]);
 
     socket.on("room:state", applySnapshot);
     socket.on("room:players", onPlayers);
@@ -141,6 +147,7 @@ export function useRoom(roomId: string): UseRoom {
     socket.on("game:claimAccepted", onClaimAccepted);
     socket.on("game:over", onOver);
     socket.on("cursor:update", onCursor);
+    socket.on("chat:message", onChat);
 
     const join = () => socket.emit("room:join", roomId);
     join();
@@ -155,6 +162,7 @@ export function useRoom(roomId: string): UseRoom {
       socket.off("game:claimAccepted", onClaimAccepted);
       socket.off("game:over", onOver);
       socket.off("cursor:update", onCursor);
+      socket.off("chat:message", onChat);
       socket.off("connect", join);
     };
   }, [socket, roomId]);
@@ -226,6 +234,14 @@ export function useRoom(roomId: string): UseRoom {
     [socket, roomId],
   );
 
+  const sendChat = useCallback(
+    (text: string) => {
+      const trimmed = text.trim();
+      if (trimmed) socket?.emit("chat:send", { roomId, text: trimmed });
+    },
+    [socket, roomId],
+  );
+
   const clearGameOver = useCallback(() => setGameOver(null), []);
 
   // ---- derived -------------------------------------------------------------
@@ -250,10 +266,12 @@ export function useRoom(roomId: string): UseRoom {
     statuses,
     alert,
     gameOver,
+    chat,
     sit,
     start,
     activateCard,
     onPointerMove,
+    sendChat,
     clearGameOver,
   };
 }
