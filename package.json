@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "All or Nothing — a SET card game. Find sets of three cards by colour, shape, number and shading. Solo puzzle modes plus real-time multiplayer races over STOMP/WebSocket. Canvas-rendered tiles, Material Design 3 UI.",
+  "description": "All or Nothing — a SET card game. Find sets of three cards by colour, shape, number and shading. Solo puzzle modes plus real-time multiplayer races over STOMP/WebSocket. Canvas-rendered tiles, Bootstrap 5.3 UI.",
   "engines": {
     "node": ">=20"
   },
@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@stomp/stompjs": "^7.0.0",
+    "bootstrap": "^5.3.3",
     "express": "^4.21.0",
     "tsx": "^4.19.1",
     "ws": "^8.18.0"

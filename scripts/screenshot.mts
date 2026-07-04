@@ -29,7 +29,7 @@ async function clickButtonWithText(page: Page, text: string): Promise<boolean> {
 }
 
 async function setTheme(page: Page, theme: "light" | "dark"): Promise<void> {
-  await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
+  await page.evaluate((t) => document.documentElement.setAttribute("data-bs-theme", t), theme);
 }
 
 async function main(): Promise<void> {
@@ -85,7 +85,7 @@ async function captureRace(page: Page): Promise<void> {
   if (!(await clickButtonWithText(page, "Create room"))) throw new Error("no Create room button");
   await page.waitForFunction(
     () => {
-      const code = document.querySelector(".display-l.mono")?.textContent ?? "";
+      const code = document.querySelector(".room-code")?.textContent ?? "";
       return /^[A-Z]{4}$/.test(code.trim());
     },
     { timeout: 12000 },

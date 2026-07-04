@@ -13,8 +13,9 @@ The 3⁴ combinations make an **81-card deck**. Three cards form a **set** when,
 different**. Find them faster than everyone else.
 
 Canvas-drawn card tiles (the original game's aesthetic, preserved) in a
-**Material Design 3 / Material You** interface — light and dark, DPI-aware,
-keyboard-navigable, screen-reader announced.
+**Bootstrap 5.3** interface — navbar, cards, buttons, grid and badges, light
+and dark (`data-bs-theme`), DPI-aware, keyboard-navigable, screen-reader
+announced.
 
 ## Play
 
@@ -51,7 +52,7 @@ shared/protocol  Client/server wire contract + STOMP destinations.
 src/render/      <set-card> custom element painting a card face on its own
                  DPI-aware canvas; palette; thumbnails.
 src/game/        Solo game controller + localStorage high scores.
-src/ui/          MD3 components, screens (home, solo, race), reusable board.
+src/ui/          Bootstrap-based UI helpers, screens (home, solo, race), board.
 src/net/         @stomp/stompjs client wrapper.
 server/stomp/    A compact STOMP 1.2 codec + broker over `ws`.
 server/rooms/    Room (shared tableau, scores, host, reconnect), registry,
@@ -73,7 +74,7 @@ private rejections come back on `/user/queue/reply`.
 ```bash
 npm install
 npm run dev        # Vite (:5173, HMR) + tsx API/STOMP server (:8462); open :5173
-npm test           # 44 tests: engine, rooms, STOMP codec, REST, full STOMP e2e
+npm test           # 45 tests: engine, rooms, STOMP codec, REST, full STOMP e2e
 npm run typecheck
 npm run build      # -> dist/
 docker compose up -d --build   # one container on 127.0.0.1:8462
@@ -90,5 +91,5 @@ See **runbook.md** for deployment to the DigitalOcean droplet.
 This restores and modernises the original SET implementation (canvas-drawn
 cards, `findAllSets`, found-sets list, timer) that lived at commit `9b7cf09`.
 The 2019 vanilla-JS core was ported to typed, tested TypeScript with behaviour
-preserved; the UI was rebuilt in Material Design 3; and the single "there are N
+preserved; the UI is built with Bootstrap 5.3; and the single "there are N
 sets" alert grew into solo modes plus a real-time multiplayer race.

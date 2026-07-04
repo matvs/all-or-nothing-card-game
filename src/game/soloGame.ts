@@ -83,18 +83,27 @@ export class SoloGame {
 
   // ---- layout ------------------------------------------------------------
   private build(): HTMLElement {
-    this.scoreValue = el("span", { class: "mono" }, "0");
-    this.timeValue = el("span", { class: "mono" }, "0:00");
-    this.deckValue = el("span", { class: "mono" }, "0");
+    const bigNum = "fs-4 fw-bold font-monospace lh-1";
+    this.scoreValue = el("span", { class: bigNum }, "0");
+    this.timeValue = el("span", { class: bigNum }, "0:00");
+    this.deckValue = el("span", { class: bigNum }, "0");
+
+    const stat = (label: string, value: HTMLElement): HTMLElement =>
+      el(
+        "div",
+        { class: "d-flex flex-column pe-2" },
+        el("span", { class: "small text-uppercase text-body-secondary lh-1 mb-1" }, label),
+        value,
+      );
 
     const stats: HTMLElement[] = [
-      el("div", { class: "hud__stat" }, el("span", {}, "Score"), this.scoreValue),
-      el("div", { class: "hud__stat" }, el("span", {}, this.opts.mode === "timed" ? "Time left" : "Time"), this.timeValue),
-      el("div", { class: "hud__stat" }, el("span", {}, "Deck"), this.deckValue),
+      stat("Score", this.scoreValue),
+      stat(this.opts.mode === "timed" ? "Time left" : "Time", this.timeValue),
+      stat("Deck", this.deckValue),
     ];
     if (this.opts.difficulty === "easy") {
-      this.setsValue = el("span", { class: "mono" }, "0");
-      stats.push(el("div", { class: "hud__stat" }, el("span", {}, "Sets here"), this.setsValue));
+      this.setsValue = el("span", { class: bigNum }, "0");
+      stats.push(stat("Sets here", this.setsValue));
     } else {
       this.setsValue = null;
     }
@@ -110,7 +119,7 @@ export class SoloGame {
       onClick: () => this.confirmNew(),
     });
 
-    const hudActions = el("div", { class: "row" });
+    const hudActions = el("div", { class: "d-flex flex-wrap gap-2 ms-auto" });
     if (this.opts.difficulty !== "hard") {
       this.hintBtn = button("Hint", { variant: "text", icon: icon("hint", 20), onClick: () => this.onHint() });
       hudActions.appendChild(this.hintBtn);
@@ -119,10 +128,8 @@ export class SoloGame {
 
     const hud = el(
       "div",
-      { class: "hud" },
-      ...stats,
-      el("div", { class: "hud__spacer" }),
-      hudActions,
+      { class: "card shadow-sm" },
+      el("div", { class: "card-body d-flex flex-wrap align-items-center gap-3 py-2" }, ...stats, hudActions),
     );
 
     this.boardEl = el("div", { class: "board", role: "grid", "aria-label": "SET board" });
@@ -130,9 +137,9 @@ export class SoloGame {
 
     const panel = el(
       "div",
-      { class: "panel" },
-      el("h3", { class: "title-m" }, "Found sets"),
-      this.foundEl,
+      { class: "card shadow-sm" },
+      el("div", { class: "card-header fw-semibold" }, "Found sets"),
+      el("div", { class: "card-body" }, this.foundEl),
     );
     this.renderFound();
 
@@ -140,9 +147,19 @@ export class SoloGame {
 
     return el(
       "div",
-      { class: "stack" },
-      el("div", { class: "row" }, back, el("h2", { class: "headline-m" }, this.title())),
-      el("div", { class: "game" }, el("div", { class: "stack" }, hud, this.boardEl), panel),
+      {},
+      el(
+        "div",
+        { class: "d-flex align-items-center gap-2 mb-3" },
+        back,
+        el("h2", { class: "h4 mb-0" }, this.title()),
+      ),
+      el(
+        "div",
+        { class: "row g-3" },
+        el("div", { class: "col-12 col-lg-8 d-flex flex-column gap-3" }, hud, this.boardEl),
+        el("div", { class: "col-12 col-lg-4" }, panel),
+      ),
     );
   }
 
@@ -181,7 +198,7 @@ export class SoloGame {
   private renderFound(): void {
     clear(this.foundEl);
     if (this.foundSets.length === 0) {
-      this.foundEl.appendChild(el("div", { class: "empty-state" }, "No sets yet — pick three cards."));
+      this.foundEl.appendChild(el("div", { class: "text-body-secondary small py-2" }, "No sets yet — pick three cards."));
       return;
     }
     // Newest first.
@@ -287,7 +304,7 @@ export class SoloGame {
   private confirmNew(): void {
     dialog({
       title: "Start a new game?",
-      body: [el("p", { class: "body-m" }, "Your current progress will be lost.")],
+      body: [el("p", { class: "mb-0" }, "Your current progress will be lost.")],
       actions: [
         { label: "Cancel" },
         { label: "New game", variant: "filled", onClick: () => this.restart() },
@@ -363,14 +380,14 @@ export class SoloGame {
     announce(`${headline} Final score ${this.score}.`);
 
     const lines: HTMLElement[] = [
-      el("p", { class: "body-l" }, `You found ${this.score} set${this.score === 1 ? "" : "s"}.`),
+      el("p", { class: "fs-5 mb-1" }, `You found ${this.score} set${this.score === 1 ? "" : "s"}.`),
     ];
-    if (completed) lines.push(el("p", { class: "body-m" }, `Time: ${formatTime(this.elapsedMs)}`));
-    if (improved) lines.push(el("p", { class: "label-l", style: "color:var(--md-sys-color-primary)" }, "New personal best!"));
+    if (completed) lines.push(el("p", { class: "text-body-secondary mb-1" }, `Time: ${formatTime(this.elapsedMs)}`));
+    if (improved) lines.push(el("p", { class: "fw-semibold text-success mb-1" }, "New personal best!"));
     lines.push(
       el(
         "p",
-        { class: "body-m", style: "color:var(--md-sys-color-on-surface-variant)" },
+        { class: "text-body-secondary small mb-0" },
         `Best ${this.opts.mode}/${this.opts.difficulty}: ${best.bestScore} sets` +
           (best.bestTimeMs != null ? `, fastest clear ${formatTime(best.bestTimeMs)}` : ""),
       ),

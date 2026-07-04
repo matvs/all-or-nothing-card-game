@@ -3,7 +3,7 @@
 ## What is this
 A SET card game: find sets of three cards where, for each of four attributes
 (colour, shape, number, shading), the three cards are all the same or all
-different. Canvas-rendered card tiles in a Material Design 3 interface. Two
+different. Canvas-rendered card tiles in a Bootstrap 5.3 interface. Two
 ways to play: **solo** (relaxed or timed, three difficulties, hints,
 localStorage high scores) and a real-time **multiplayer race** where everyone
 competes on the same board — first to claim a valid set scores it and three
@@ -35,7 +35,7 @@ npm run dev:server          # tsx watch server/index.ts (:8462)
 
 Tests / typecheck / build:
 ```bash
-npm test                    # 44 unit + integration tests (engine + server + STOMP e2e)
+npm test                    # 45 unit + integration tests (engine + server + STOMP e2e)
 npm run typecheck           # tsc --noEmit
 npm run build               # vite build -> dist/
 ```

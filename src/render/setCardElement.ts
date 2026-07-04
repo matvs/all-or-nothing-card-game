@@ -9,7 +9,7 @@ export type CardVisualState = "idle" | "hint" | "good" | "bad";
  *
  * Why a canvas-per-tile instead of one big canvas (as the original had):
  *  - each tile is a real focusable button (keyboard + screen-reader friendly),
- *  - MD3 surface/elevation/ripple/selection live in CSS on the element,
+ *  - the card surface/elevation/selection styles live in CSS on the element,
  *  - responsive CSS grid handles layout; the canvas just paints the symbols,
  *  - crisp on HiDPI and re-paints on resize / monitor DPR change.
  *

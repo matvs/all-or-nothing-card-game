@@ -1,4 +1,6 @@
-/** Tiny dependency-free DOM helpers + MD3 ripple, snackbar, dialog, a11y live region. */
+/** Tiny dependency-free DOM helpers + Bootstrap 5.3 button, toast, modal, a11y live region. */
+import Modal from "bootstrap/js/dist/modal";
+import Toast from "bootstrap/js/dist/toast";
 
 type Props = Record<string, unknown>;
 type Child = Node | string | null | undefined | false;
@@ -35,21 +37,7 @@ export function clear(node: HTMLElement): void {
   node.replaceChildren();
 }
 
-/** MD3 ripple: attaches a pointer-driven expanding circle to a positioned element. */
-export function attachRipple(element: HTMLElement): void {
-  element.addEventListener("pointerdown", (event) => {
-    const rect = element.getBoundingClientRect();
-    const size = Math.max(rect.width, rect.height);
-    const ripple = document.createElement("span");
-    ripple.className = "ripple";
-    ripple.style.width = ripple.style.height = `${size}px`;
-    ripple.style.left = `${event.clientX - rect.left - size / 2}px`;
-    ripple.style.top = `${event.clientY - rect.top - size / 2}px`;
-    element.appendChild(ripple);
-    ripple.addEventListener("animationend", () => ripple.remove());
-  });
-}
-
+// ---- Buttons (Bootstrap) --------------------------------------------------
 interface ButtonOptions {
   variant?: "filled" | "tonal" | "outlined" | "text" | "danger";
   size?: "md" | "lg";
@@ -59,57 +47,84 @@ interface ButtonOptions {
   ariaLabel?: string;
 }
 
+/** Map our semantic variants onto Bootstrap button classes. */
+const VARIANT_CLASS: Record<NonNullable<ButtonOptions["variant"]>, string> = {
+  filled: "btn-primary",
+  tonal: "btn-secondary",
+  outlined: "btn-outline-secondary",
+  text: "btn-link",
+  danger: "btn-danger",
+};
+
 export function button(label: string, opts: ButtonOptions = {}): HTMLButtonElement {
-  const b = el("button", {
-    class: `btn btn--${opts.variant ?? "filled"}${opts.size === "lg" ? " btn--lg" : ""}`,
-    type: "button",
-  }) as HTMLButtonElement;
-  if (opts.icon) {
-    opts.icon.classList.add("btn__icon");
-    b.appendChild(opts.icon);
-  }
+  const classes = [
+    "btn",
+    VARIANT_CLASS[opts.variant ?? "filled"],
+    opts.size === "lg" ? "btn-lg" : "",
+    "d-inline-flex",
+    "align-items-center",
+    "justify-content-center",
+    "gap-2",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const b = el("button", { class: classes, type: "button" }) as HTMLButtonElement;
+  if (opts.icon) b.appendChild(opts.icon);
   b.appendChild(document.createTextNode(label));
   if (opts.ariaLabel) b.setAttribute("aria-label", opts.ariaLabel);
   if (opts.disabled) b.disabled = true;
   if (opts.onClick) b.addEventListener("click", opts.onClick);
-  attachRipple(b);
   return b;
 }
 
-export function iconButton(iconEl: SVGElement, ariaLabel: string, onClick: () => void): HTMLButtonElement {
-  const b = el("button", { class: "icon-btn", type: "button", "aria-label": ariaLabel }) as HTMLButtonElement;
+export function iconButton(
+  iconEl: SVGElement,
+  ariaLabel: string,
+  onClick: () => void,
+  className = "btn btn-outline-secondary",
+): HTMLButtonElement {
+  const b = el("button", {
+    class: `${className} d-inline-flex align-items-center justify-content-center`,
+    type: "button",
+    "aria-label": ariaLabel,
+  }) as HTMLButtonElement;
   b.appendChild(iconEl);
   b.addEventListener("click", onClick);
-  attachRipple(b);
   return b;
 }
 
-// ---- Snackbar -------------------------------------------------------------
-let snackHost: HTMLElement | null = null;
-function ensureSnackHost(): HTMLElement {
-  if (!snackHost) {
-    snackHost = el("div", { class: "snackbar-host", role: "status", "aria-live": "polite" });
-    document.body.appendChild(snackHost);
+// ---- Toast (Bootstrap) ----------------------------------------------------
+let toastHost: HTMLElement | null = null;
+function ensureToastHost(): HTMLElement {
+  if (!toastHost) {
+    toastHost = el("div", {
+      class: "toast-container position-fixed bottom-0 start-50 translate-middle-x p-3",
+      style: "z-index:1090",
+    });
+    document.body.appendChild(toastHost);
   }
-  return snackHost;
+  return toastHost;
 }
 
 export function snackbar(message: string, variant: "info" | "ok" | "err" = "info", timeout = 2600): void {
-  const host = ensureSnackHost();
-  const bar = el("div", { class: `snackbar ${variant === "info" ? "" : variant}` }, message);
-  host.appendChild(bar);
-  setTimeout(() => {
-    bar.style.opacity = "0";
-    bar.style.transition = "opacity 180ms";
-    setTimeout(() => bar.remove(), 200);
-  }, timeout);
+  const host = ensureToastHost();
+  const bg = variant === "ok" ? "text-bg-success" : variant === "err" ? "text-bg-danger" : "text-bg-dark";
+  const toastEl = el(
+    "div",
+    { class: `toast align-items-center border-0 ${bg}`, role: "status", "aria-live": "polite", "aria-atomic": "true" },
+    el("div", { class: "d-flex" }, el("div", { class: "toast-body" }, message)),
+  );
+  host.appendChild(toastEl);
+  const toast = new Toast(toastEl, { delay: timeout, autohide: true });
+  toastEl.addEventListener("hidden.bs.toast", () => toastEl.remove());
+  toast.show();
 }
 
 // ---- Accessible live region ----------------------------------------------
 let liveRegion: HTMLElement | null = null;
 export function announce(message: string): void {
   if (!liveRegion) {
-    liveRegion = el("div", { class: "sr-only", "aria-live": "assertive", role: "alert" });
+    liveRegion = el("div", { class: "visually-hidden", "aria-live": "assertive", role: "alert" });
     document.body.appendChild(liveRegion);
   }
   // Clear then set so repeated identical messages are still announced.
@@ -119,7 +134,7 @@ export function announce(message: string): void {
   }, 30);
 }
 
-// ---- Dialog ---------------------------------------------------------------
+// ---- Modal (Bootstrap) ----------------------------------------------------
 export interface DialogAction {
   label: string;
   variant?: ButtonOptions["variant"];
@@ -132,12 +147,35 @@ export function dialog(opts: {
   actions: DialogAction[];
   dismissable?: boolean;
 }): () => void {
-  const close = () => scrim.remove();
-  const actionRow = el("div", { class: "actions" });
+  const dismissable = opts.dismissable !== false;
+
+  const footer = el("div", { class: "modal-footer" });
+  const header = el(
+    "div",
+    { class: "modal-header" },
+    el("h5", { class: "modal-title" }, opts.title),
+    dismissable ? el("button", { type: "button", class: "btn-close", "aria-label": "Close" }) : null,
+  );
+  const modalEl = el(
+    "div",
+    { class: "modal fade", tabindex: "-1", "aria-modal": "true", role: "dialog", "aria-label": opts.title },
+    el(
+      "div",
+      { class: "modal-dialog modal-dialog-centered" },
+      el("div", { class: "modal-content" }, header, el("div", { class: "modal-body d-flex flex-column gap-2" }, ...opts.body), footer),
+    ),
+  );
+  document.body.appendChild(modalEl);
+
+  const modal = new Modal(modalEl, { backdrop: dismissable ? true : "static", keyboard: dismissable });
+  const close = () => modal.hide();
+
+  header.querySelector<HTMLButtonElement>(".btn-close")?.addEventListener("click", close);
+
   for (const action of opts.actions) {
-    actionRow.appendChild(
+    footer.appendChild(
       button(action.label, {
-        variant: action.variant ?? "text",
+        variant: action.variant ?? "outlined",
         onClick: () => {
           action.onClick?.();
           if (!action.keepOpen) close();
@@ -145,19 +183,8 @@ export function dialog(opts: {
       }),
     );
   }
-  const box = el(
-    "div",
-    { class: "dialog", role: "dialog", "aria-modal": "true", "aria-label": opts.title },
-    el("h2", { class: "title-l" }, opts.title),
-    ...opts.body,
-    actionRow,
-  );
-  const scrim = el("div", { class: "scrim" }, box);
-  if (opts.dismissable !== false) {
-    scrim.addEventListener("click", (e) => {
-      if (e.target === scrim) close();
-    });
-  }
-  document.body.appendChild(scrim);
+
+  modalEl.addEventListener("hidden.bs.modal", () => modalEl.remove());
+  modal.show();
   return close;
 }
