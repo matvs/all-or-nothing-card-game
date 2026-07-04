@@ -1,143 +1,113 @@
-# Runbook — all-or-nothing
+# Runbook — all-or-nothing-card-game (SET)
 
 ## What is this
-"All or Nothing" is a trick-taking bidding card game: bid *exactly* how many
-tricks you will take, and miss by even one (over or under) to score nothing.
-It ships as one Node service that serves a Vite/TypeScript frontend plus a
-REST + WebSocket API. Play solo against three AI opponents (three difficulty
-levels, all in-browser) or open a 4-letter room code for realtime multiplayer
-with AI fill-ins, reconnection grace, spectators, per-room chat and persistent
-win/loss stats. There is **no LLM** anywhere — the AI is pure heuristic
-TypeScript — so ORCHESTRATION.md §4 (AI provider adapter) does not apply.
+A SET card game: find sets of three cards where, for each of four attributes
+(colour, shape, number, shading), the three cards are all the same or all
+different. Canvas-rendered card tiles in a Material Design 3 interface. Two
+ways to play: **solo** (relaxed or timed, three difficulties, hints,
+localStorage high scores) and a real-time **multiplayer race** where everyone
+competes on the same board — first to claim a valid set scores it and three
+fresh cards drop in. Realtime transport is **STOMP over WebSocket**. One Node
+service serves the built frontend, the REST API and the STOMP endpoint on a
+single port, same-origin. Stateless: rooms are in-memory, solo scores live in
+the browser. No database, no AI.
 
 ## Prerequisites
-- **Local:** Node 20+ (Node 24 tested) and npm. Native `better-sqlite3` builds
-  during `npm install` (needs python3 + a C++ toolchain; already present on
-  this dev box and installed inside the Docker builder stage).
-- **Droplet:** Docker Engine + docker compose v2, host nginx + certbot, DNS
-  control over `matvs.dev`. No database server needed (SQLite).
+- Local: Node >= 20 (developed on 24), npm. No native modules, no DB.
+- Droplet: Docker Engine + docker compose v2, host nginx + certbot, DNS access
+  for `matvs.dev` (see apps/ORCHESTRATION.md and apps/DEPLOYMENT-WSL2.md).
 
 ## Run locally (dev)
+Two processes (Vite for HMR + the API/STOMP server); Vite proxies `/api` and
+`/stomp` to the server so the browser stays same-origin (no CORS).
+
 ```bash
-npm install                 # first time; compiles better-sqlite3
-
-# Two processes at once (Vite on :5173 proxying /api + /ws to the API on :8462):
-npm run dev
-#   → open http://localhost:5173
-
-# …or run them separately:
-npm run dev:web             # Vite dev server on :5173
-npm run dev:server          # API + WS on :8462 (tsx watch)
+npm install                 # first time (if the npm cache is read-only: npm install --cache "$TMPDIR/npmcache")
+npm run dev                 # vite on :5173 + tsx server on :8462
+# open http://localhost:5173
 ```
-Environment variables (all optional locally; see `.env.example`):
-| var | meaning | default |
-|---|---|---|
-| `PORT` | HTTP+WS port | `8462` |
-| `DB_PATH` | SQLite file (stats) | `./data/allornothing.sqlite3` |
-| `NODE_ENV` | `production` serves built `dist/`; else expects Vite dev | `development` |
-| `RECONNECT_GRACE_SECONDS` | disconnect → AI-takeover window | `60` |
-| `AI_THINK_DELAY_MS` | AI "thinking" pause before it acts (ms) | `550` |
 
-Tests / checks (no network, no external services — safe in the sandbox):
+Individually:
 ```bash
-npm test          # 214 unit + integration tests (engine, AI legality, server, ws)
-npm run typecheck # tsc --noEmit, strict
-npm run build     # Vite production bundle → dist/
-npm run smoke     # end-to-end prod-path check (needs a prior `npm run build`)
+npm run dev:web             # vite dev server (:5173)
+npm run dev:server          # tsx watch server/index.ts (:8462)
+```
+
+Tests / typecheck / build:
+```bash
+npm test                    # 44 unit + integration tests (engine + server + STOMP e2e)
+npm run typecheck           # tsc --noEmit
+npm run build               # vite build -> dist/
+```
+
+Optional visual check (uses the sandbox chrome-headless-shell):
+```bash
+npm run build && npm run preview &                   # prod server on :8462 serving dist/
+SHOT_URL=http://127.0.0.1:8462 npm run screenshot    # writes PNGs to $TMPDIR/set-shots
 ```
 
 ## Run locally (docker)
 ```bash
 docker compose up -d --build
-#   → open http://127.0.0.1:8462   (frontend, API and WS all on one port)
+# open http://localhost:8462   (WSL2 forwards localhost to the loopback bind)
 docker compose logs -f app
-docker compose down                # add -v to also wipe the stats volume
+docker compose down
 ```
-Click "Deal me in" for a solo game, or "Open a room" and share the 4-letter
-code with a second browser/tab to test multiplayer.
+The service publishes on `127.0.0.1:8462` only. From the Windows browser use
+`http://localhost:8462` (WSL2 localhost forwarding).
 
 ## Deploy to DigitalOcean droplet
-1. **DNS A record:** point `allornothing.matvs.dev` → droplet IP (same A-record
-   pattern as the other apps).
+1. **DNS**: add an A record `allornothing.matvs.dev` -> droplet IP.
 2. **Ship the release** to `/opt/allornothing`:
    ```bash
-   rsync -az --delete --exclude node_modules --exclude dist --exclude data \
+   rsync -a --exclude node_modules --exclude dist --exclude .git \
      ./ root@<droplet>:/opt/allornothing/
-   # (or: git clone/pull the repo into /opt/allornothing)
    ```
-3. **.env** — none is strictly required (compose sets everything), but to
-   override defaults create `/opt/allornothing/.env`:
-   ```
-   PORT=8462                       # keep in sync with compose + nginx if changed
-   DB_PATH=/data/allornothing.sqlite3   # inside the container; volume-backed
-   NODE_ENV=production             # serve dist/
-   RECONNECT_GRACE_SECONDS=60      # reconnection window before AI takes a seat
-   AI_THINK_DELAY_MS=600           # AI pacing (ms) so humans can follow the play
-   ```
-4. **Build & start:**
+3. **.env** — none required. The only knobs are `PORT` (default 8462) and
+   `NODE_ENV=production` (already set in the image/compose). There is no
+   database and no AI provider to configure.
+4. **Build & run**:
    ```bash
-   cd /opt/allornothing
-   docker compose up -d --build
-   docker compose ps              # app should be "healthy" within ~10s
+   cd /opt/allornothing && docker compose up -d --build
    ```
-5. **nginx vhost + TLS:**
+5. **nginx + TLS**:
    ```bash
    sudo cp nginx/allornothing.matvs.dev.conf /etc/nginx/sites-available/
    sudo ln -s /etc/nginx/sites-available/allornothing.matvs.dev.conf /etc/nginx/sites-enabled/
    sudo certbot --nginx -d allornothing.matvs.dev
    sudo nginx -t && sudo systemctl reload nginx
    ```
-6. **Smoke test:**
+   The vhost proxies `/` and `/api` normally and upgrades `/stomp` to a
+   WebSocket (the `map $http_upgrade $connection_upgrade` block is included).
+6. **Smoke test**:
    ```bash
-   curl -s https://allornothing.matvs.dev/api/health          # {"ok":true,...}
-   curl -sI https://allornothing.matvs.dev/ | grep -i content-type   # text/html
-   # In a browser: open the site, "Deal me in", play a hand; open a room and
-   # join it from a second device to confirm WebSocket play + reconnection.
+   curl -s https://allornothing.matvs.dev/api/health         # {"ok":true,"rooms":0}
+   curl -s -XPOST -H 'content-type: application/json' \
+     -d '{"name":"Ada"}' https://allornothing.matvs.dev/api/rooms   # {code,playerId,token}
    ```
+   Then open the site, create a room, open the printed code in a second
+   browser/incognito, Start, and race.
 
 ## Operations
-- **Logs:** `docker compose logs -f app` (or `--since 1h`). Startup prints the
-  bound port, DB path, and whether it is serving `dist/`.
-- **Backup** (the only stateful thing is the SQLite stats DB in the named
-  volume). One-liner, safe while running (uses SQLite's online backup):
-  ```bash
-  docker compose exec -T app node -e "const D=require('better-sqlite3');const d=new D(process.env.DB_PATH);d.backup('/data/backup-'+Date.now()+'.sqlite3').then(()=>{console.log('ok');process.exit(0)})"
-  # copy it out of the volume:
-  docker cp allornothing:/data/. /opt/allornothing/backups/
-  ```
-  Cron (daily 03:30, keep 14 days):
-  ```
-  30 3 * * * cd /opt/allornothing && docker compose exec -T app sh -c 'cp "$DB_PATH" /data/backup-$(date +\%F).sqlite3' && find /opt/allornothing/backups -name 'backup-*.sqlite3' -mtime +14 -delete
-  ```
-- **Restore:** stop the app, drop the backup file in as the DB, restart:
-  ```bash
-  docker compose stop app
-  docker cp ./backups/backup-YYYY-MM-DD.sqlite3 allornothing:/data/allornothing.sqlite3
-  docker compose start app
-  ```
-- **Upgrade:** ship the new code, then `docker compose up -d --build` (the data
-  volume persists across rebuilds). Zero-downtime is unnecessary for a game;
-  the rebuild swaps in a few seconds.
-- **Rollback:** `git checkout <previous-tag>` (or previous release dir) and
-  `docker compose up -d --build`. The stats DB schema is additive/idempotent,
-  so older code reads it fine.
+- **Logs**: `docker compose logs -f app`.
+- **Health**: `GET /api/health` (also the container HEALTHCHECK).
+- **Backup/restore**: nothing to back up — the app is stateless (in-memory
+  rooms, browser-side solo scores). Empty idle rooms are swept after 30 min.
+- **Upgrade**: `git pull` (or rsync) then `docker compose up -d --build`.
+- **Rollback**: `git checkout <prev>` then rebuild; or `docker compose down`
+  and redeploy the previous image.
 
 ## Troubleshooting
-1. **`better-sqlite3` fails to build** (local or in the image): ensure
-   python3 + make + g++ are available. The Docker builder installs them; if a
-   local `npm install` fails, install build tools or use the container.
-   In this dev sandbox the npm cache is read-only — prefix installs with
-   `npm_config_cache="$TMPDIR/npm-cache"`.
-2. **WebSocket won't connect / games freeze at "reconnecting…"**: the nginx
-   `/ws` block must send `Upgrade`/`Connection` headers (it does in the shipped
-   vhost). Verify `map $http_upgrade $connection_upgrade` is present and
-   `proxy_read_timeout` is generous. Check `docker compose logs app` for the
-   handshake and confirm the container is healthy.
-3. **Blank page / 404 on assets**: the image must contain a fresh `dist/`.
-   Rebuild with `docker compose up -d --build`; confirm `NODE_ENV=production`
-   (only then does the server serve `dist/` and the SPA fallback).
-4. **Stats not persisting across restarts**: confirm the `allornothing_data`
-   volume is mounted and `DB_PATH` points inside it (`/data/...`). `docker
-   compose down` (without `-v`) keeps the volume; `-v` deletes it.
-5. **Port already in use**: something else holds `8462`. Change `PORT` in the
-   compose env **and** the nginx `proxy_pass`, then rebuild + reload nginx.
+- **Multiplayer never connects / status stuck on "Reconnecting..."**: the
+  `/stomp` WebSocket upgrade is not reaching the container. Check the nginx
+  `location /stomp` block and the `$connection_upgrade` map; confirm
+  `curl -I https://allornothing.matvs.dev/stomp` returns 400/426 (not 404).
+- **CORS errors in the console**: you opened the Vite port in production
+  instead of the server port. In prod the Node server serves the frontend on
+  the same origin; open `:8462` (or the domain), not `:5173`.
+- **`npm ci` fails in Docker**: the lockfile must match package.json. Run
+  `npm install` locally to refresh `package-lock.json`, commit, redeploy.
+- **Port already in use**: something else holds 8462 — change `PORT` in
+  `docker-compose.yml` AND the nginx `proxy_pass`, or free the port.
+- **Cards look blurry**: the canvas is DPI-aware and re-paints on resize; a
+  hard refresh clears any stale cached bundle.
