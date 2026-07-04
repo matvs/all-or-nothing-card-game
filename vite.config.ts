@@ -14,7 +14,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": { target: apiTarget, changeOrigin: true },
-      "/ws": { target: apiTarget, ws: true, changeOrigin: true },
+      // STOMP over WebSocket — proxied to the backend so dev is same-origin.
+      "/stomp": { target: apiTarget, ws: true, changeOrigin: true },
     },
   },
 });

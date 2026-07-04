@@ -1,29 +1,25 @@
-# All or Nothing — one Node service serving the frontend + REST + WebSocket.
-# Published on 127.0.0.1:8462 only; the droplet's host nginx terminates TLS and
-# proxies to it (see nginx/allornothing.matvs.dev.conf). SQLite data lives in a
-# named volume mounted at /data.
+# All or Nothing (SET) — one Node service serving the frontend + REST + STOMP.
+# Published on 127.0.0.1:8462 ONLY (loopback); the droplet's host nginx
+# terminates TLS and proxies to it (see nginx/allornothing.matvs.dev.conf).
+# Stateless: multiplayer rooms are in-memory, solo scores are in localStorage,
+# so there is no database and no volume.
 #
 #   docker compose up -d --build
 #
 services:
   app:
     build: .
-    image: allornothing:latest
-    container_name: allornothing
+    image: allornothing-set:latest
+    container_name: allornothing-set
     restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: "8462"
-      DB_PATH: /data/allornothing.sqlite3
-      RECONNECT_GRACE_SECONDS: "60"
-      # How long an AI "thinks" before acting, in ms (pacing for human players).
-      AI_THINK_DELAY_MS: "600"
       TZ: Europe/Warsaw
     ports:
-      # Bind to loopback only — never expose the container port publicly.
-      - "8462:8462"
-    volumes:
-      - allornothing_data:/data
+      # Loopback bind only — reachable from the Windows browser via WSL2
+      # localhost forwarding, never exposed on other interfaces.
+      - "127.0.0.1:8462:8462"
     healthcheck:
       test:
         - CMD
@@ -34,6 +30,3 @@ services:
       timeout: 4s
       retries: 3
       start_period: 8s
-
-volumes:
-  allornothing_data:

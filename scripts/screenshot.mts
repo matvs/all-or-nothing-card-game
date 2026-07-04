@@ -69,10 +69,34 @@ async function main(): Promise<void> {
     await new Promise((r) => setTimeout(r, 250));
     await page.screenshot({ path: path.join(OUT, "solo-dark-selected.png") as `${string}.png` });
 
+    // Multiplayer: create a room (needs the running server), show lobby + board.
+    await captureRace(page);
+
     console.log(`Saved screenshots to ${OUT}`);
   } finally {
     await browser.close();
   }
+}
+
+async function captureRace(page: Page): Promise<void> {
+  await page.goto(URL, { waitUntil: "networkidle0", timeout: 20000 });
+  await setTheme(page, "light");
+  await new Promise((r) => setTimeout(r, 200));
+  if (!(await clickButtonWithText(page, "Create room"))) throw new Error("no Create room button");
+  await page.waitForFunction(
+    () => {
+      const code = document.querySelector(".display-l.mono")?.textContent ?? "";
+      return /^[A-Z]{4}$/.test(code.trim());
+    },
+    { timeout: 12000 },
+  );
+  await new Promise((r) => setTimeout(r, 400));
+  await page.screenshot({ path: path.join(OUT, "race-lobby.png") as `${string}.png` });
+
+  if (!(await clickButtonWithText(page, "Start race"))) throw new Error("no Start race button");
+  await page.waitForSelector("set-card", { timeout: 10000 });
+  await new Promise((r) => setTimeout(r, 700));
+  await page.screenshot({ path: path.join(OUT, "race-playing.png") as `${string}.png` });
 }
 
 main().catch((err) => {
