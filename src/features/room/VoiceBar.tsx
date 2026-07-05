@@ -3,8 +3,9 @@ import type { RoomPlayer } from "../../../shared/protocol.js";
 import type { UseVoice } from "./useVoice.js";
 
 /**
- * Voice channel controls: join/leave the WebRTC mesh and a push-to-talk button
- * (hold mouse or Space to transmit). Shows each connected peer with a state dot.
+ * Voice channel controls: join/leave the WebRTC mesh and push-to-talk status.
+ * The V key is wired globally by useVoice, so it works even when the button is
+ * not focused. The button remains useful on touch devices.
  */
 export function VoiceBar({ voice, players }: { voice: UseVoice; players: RoomPlayer[] }) {
   if (!voice.supported) {
@@ -35,14 +36,8 @@ export function VoiceBar({ voice, players }: { voice: UseVoice; players: RoomPla
             onPointerDown={() => voice.setTalking(true)}
             onPointerUp={() => voice.setTalking(false)}
             onPointerLeave={() => voice.setTalking(false)}
-            onKeyDown={(e) => {
-              if (e.key === " " || e.key === "Enter") voice.setTalking(true);
-            }}
-            onKeyUp={(e) => {
-              if (e.key === " " || e.key === "Enter") voice.setTalking(false);
-            }}
           >
-            {voice.talking ? "🔴 Talking…" : "🎙 Hold to talk"}
+            {voice.talking ? "Talking..." : "Hold V or press here"}
           </Button>
           <Button variant="outline-secondary" size="sm" onClick={voice.leave}>
             Leave voice

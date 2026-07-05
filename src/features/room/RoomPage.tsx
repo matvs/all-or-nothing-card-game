@@ -89,6 +89,7 @@ export function RoomPage() {
   const voice = useVoice(roomId);
   const containerRef = useRef<HTMLDivElement>(null);
   const [whyRows, setWhyRows] = useState<ExplanationRow[] | null>(null);
+  const [chatOpen, setChatOpen] = useState(true);
 
   if (room.needsLogin) {
     return (
@@ -174,7 +175,7 @@ export function RoomPage() {
       <Roster players={room.players} />
       <SeatPicker players={room.players} meColor={room.me?.color} onSit={room.sit} />
 
-      <Row>
+      <Row className="room-play-layout">
         <Col lg={7} className="game-board-col">
           <div className="game-toolbar">
             <div>
@@ -203,10 +204,25 @@ export function RoomPage() {
           {renderAlert()}
         </Col>
 
-        <Col lg={5}>
-          <div className="mb-3">
-            <h2 className="h5 mb-2">Chat</h2>
-            <ChatPanel messages={room.chat} onSend={room.sendChat} />
+        <Col lg={5} className="room-side">
+          <div className={`chat-shell${chatOpen ? "" : " is-collapsed"}`}>
+            <div className="panel-header">
+              <h2 className="h5 mb-0">Chat</h2>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => setChatOpen((open) => !open)}
+                aria-expanded={chatOpen}
+                aria-controls="room-chat-panel"
+              >
+                {chatOpen ? "Collapse" : `Open (${room.chat.length})`}
+              </Button>
+            </div>
+            {chatOpen && (
+              <div id="room-chat-panel">
+                <ChatPanel messages={room.chat} onSend={room.sendChat} />
+              </div>
+            )}
           </div>
           <FoundSetsPanel sets={room.found} />
         </Col>

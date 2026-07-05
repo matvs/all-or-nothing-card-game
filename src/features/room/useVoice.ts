@@ -220,6 +220,36 @@ export function useVoice(roomId: string): UseVoice {
     setTalkingState(on);
   }, []);
 
+  useEffect(() => {
+    if (!inVoice) return;
+
+    const isTypingTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false;
+      const tag = target.tagName.toLowerCase();
+      return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
+    };
+    const isTalkKey = (event: KeyboardEvent) => event.key.toLowerCase() === "v";
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat || isTypingTarget(event.target) || !isTalkKey(event)) return;
+      event.preventDefault();
+      setTalking(true);
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (isTypingTarget(event.target) || !isTalkKey(event)) return;
+      event.preventDefault();
+      setTalking(false);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      setTalking(false);
+    };
+  }, [inVoice, setTalking]);
+
   // Leave cleanly on unmount.
   useEffect(() => () => leave(), [leave]);
 

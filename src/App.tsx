@@ -3,6 +3,7 @@ import Container from "react-bootstrap/Container";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "./app/hooks.js";
 import { AlertBar } from "./features/alert/AlertBar.js";
+import { HowToPlayPage } from "./features/mainPage/HowToPlayPage.js";
 import { MainPage } from "./features/mainPage/MainPage.js";
 import { CreateRoomModal } from "./features/modals/CreateRoomModal.js";
 import { JoinRoomModal } from "./features/modals/JoinRoomModal.js";
@@ -52,6 +53,7 @@ export function App() {
             />
           }
         />
+        <Route path="/how-to-play" element={<HowToPlayPage />} />
         <Route path="/singleplayer" element={<SinglePlayerPage />} />
         <Route path="/room/:roomId" element={<RoomPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

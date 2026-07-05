@@ -2,8 +2,6 @@ import Button from "react-bootstrap/Button";
 import Card from "react-bootstrap/Card";
 import Col from "react-bootstrap/Col";
 import Container from "react-bootstrap/Container";
-import OverlayTrigger from "react-bootstrap/OverlayTrigger";
-import Popover from "react-bootstrap/Popover";
 import Row from "react-bootstrap/Row";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch } from "../../app/hooks.js";
@@ -16,22 +14,9 @@ interface MainPageProps {
   onJoinRoom: () => void;
 }
 
-const howToPlay = (
-  <Popover id="popover-how-to-play">
-    <Popover.Header as="h3">How to Play</Popover.Header>
-    <Popover.Body>
-      Find a <strong>set</strong> of three cards. For each of the four properties —{" "}
-      <strong>color</strong>, <strong>shape</strong>, <strong>filling</strong> and{" "}
-      <strong>number</strong> — the three cards must be either <em>all the same</em> or{" "}
-      <em>all different</em>. Click three cards; if they form a set you score, otherwise you can
-      see why in the explanation table.
-    </Popover.Body>
-  </Popover>
-);
-
 /**
  * The recovered landing page: the "All or Nothing Card Game" jumbotron with a
- * How-to-Play popover, plus the SinglePlayer and MultiPlayer cards.
+ * dedicated How-to-Play tutorial page, plus the SinglePlayer and MultiPlayer cards.
  */
 export function MainPage({ user, onLogin, onCreateRoom, onJoinRoom }: MainPageProps) {
   const navigate = useNavigate();
@@ -44,11 +29,14 @@ export function MainPage({ user, onLogin, onCreateRoom, onJoinRoom }: MainPagePr
           <div className="jumbotron">
             <h1>All or Nothing Card Game</h1>
             <p>You can play a single-player game or multiplayer.</p>
-            <p>
-              <OverlayTrigger trigger="click" placement="right" overlay={howToPlay} rootClose>
-                <Button variant="info">How to Play</Button>
-              </OverlayTrigger>
-            </p>
+            <div className="main-actions">
+              <Button variant="info" onClick={() => navigate("/how-to-play")}>
+                How to Play
+              </Button>
+              <Button variant="outline-secondary" onClick={() => navigate("/singleplayer")}>
+                Single player
+              </Button>
+            </div>
           </div>
         </Col>
       </Row>
@@ -77,7 +65,7 @@ export function MainPage({ user, onLogin, onCreateRoom, onJoinRoom }: MainPagePr
                   : "First you need to log in."}
               </Card.Text>
               {user ? (
-                <div>
+                <div className="main-actions">
                   <Button variant="success" onClick={onJoinRoom}>
                     Join
                   </Button>
