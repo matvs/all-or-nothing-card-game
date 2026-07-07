@@ -8,7 +8,13 @@
 #
 services:
   app:
-    build: .
+    build:
+      context: .
+      additional_contexts:
+        # Shared @matvs/core-realtime lives in the sibling core repo; the app's `file:` dependency
+        # resolves against it during the image build. The Dockerfile compiles its dist in-image
+        # (stage `core-realtime`), so no host pre-build is required.
+        matvs_core: ../core
     image: allornothing-set:latest
     container_name: allornothing-set
     restart: unless-stopped
