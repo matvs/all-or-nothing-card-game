@@ -4,40 +4,11 @@ import Button from "react-bootstrap/Button";
 import Container from "react-bootstrap/Container";
 import Table from "react-bootstrap/Table";
 import { useNavigate } from "react-router-dom";
-import { explainTriple, isSet, makeCard, type Card } from "../../../shared/engine/index.js";
+import { explainTriple, isSet, type Card } from "../../../shared/engine/index.js";
 import { ExplanationTable } from "../../components/ExplanationTable.js";
 import { Board } from "../../game/Board.js";
 import type { CardStatus } from "../../game/SetCard.js";
-
-const guidedExamples: { title: string; cards: [Card, Card, Card]; note: string }[] = [
-  {
-    title: "Every property is different",
-    cards: [makeCard(0, 0, 0, 0), makeCard(1, 1, 1, 1), makeCard(2, 2, 2, 2)],
-    note: "Color, shape, filling and number all use 0, 1 and 2 exactly once.",
-  },
-  {
-    title: "Some same, some different",
-    cards: [makeCard(0, 1, 0, 2), makeCard(0, 2, 1, 0), makeCard(0, 0, 2, 1)],
-    note: "Color is the same on all three cards. Shape, filling and number are all different.",
-  },
-  {
-    title: "Almost, but not a set",
-    cards: [makeCard(0, 0, 0, 0), makeCard(0, 1, 1, 1), makeCard(1, 2, 2, 2)],
-    note: "The colors are two purple and one green, so color is neither all same nor all different.",
-  },
-];
-
-const practiceCards = [
-  makeCard(0, 0, 0, 0),
-  makeCard(1, 1, 1, 1),
-  makeCard(2, 2, 2, 2),
-  makeCard(0, 1, 2, 0),
-  makeCard(1, 2, 0, 1),
-  makeCard(2, 0, 1, 2),
-  makeCard(0, 2, 1, 1),
-  makeCard(1, 0, 2, 2),
-  makeCard(2, 1, 0, 0),
-];
+import { guidedExamples, practiceCards } from "./tutorialData.js";
 
 function ruleVerdict(cards: [Card, Card, Card] | null) {
   if (!cards) return null;
