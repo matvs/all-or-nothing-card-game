@@ -37,8 +37,10 @@ drop in; a wrong claim costs a point. Live scoreboard, each player's **coloured
 hand cursor**, and reconnect-with-token that keeps your seat and score.
 
 - **Text chat** — over the same WebSocket connection, authors coloured by seat.
-- **Voice chat** — an opt-in **WebRTC** mesh with **push-to-talk** (hold the
-  button or Space); signalling is relayed by the server, audio is peer-to-peer.
+- **Voice chat** — an opt-in **WebRTC** mesh with **hold-to-talk**: hold the `V`
+  key (or press-and-hold the on-screen button) to open your mic and release to
+  mute, with a "● Live" indicator; it auto-mutes if the tab loses focus.
+  Signalling is relayed by the server, audio is peer-to-peer.
 
 ## Architecture
 

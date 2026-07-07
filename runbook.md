@@ -10,11 +10,26 @@ different. Faithful canvas-drawn card figures (a port of the recovered original
   among them (cards stay put; found sets fill the side panel).
 - **Multiplayer** — a shared, **server-authoritative** board over **native WebSockets**;
   coloured seats, live scores, coloured hand cursors, reconnect-with-token,
-  **text chat**, and opt-in **WebRTC push-to-talk voice**.
+  **text chat**, opt-in **WebRTC hold-to-talk voice**, and collapsible side panels.
 
 One Node service serves the built frontend, the REST API (`/api`) and the
 native WebSocket endpoint (`/ws`) on a single port, same-origin. Stateless:
 rooms are in-memory, there is no database and no AI.
+
+## Controls & UI
+- **How to Play** — a dedicated page at `/how-to-play` (the "How to Play" button
+  on the landing page). It is an *interactive tutorial*: a stepper walks through
+  three worked examples on a live card board, and a "try it yourself" practice
+  lab lets you pick three cards and shows the rule-by-rule verdict. It is not a
+  hover tooltip.
+- **Voice push-to-talk** — in a room, join voice, then **hold the `V` key** to
+  open your mic and release to mute (an on-screen "● Live" indicator and the
+  glowing button show when you are transmitting). Press-and-hold the on-screen
+  button works too (touch/mouse fallback). Typing in the chat box never triggers
+  the mic, and the mic auto-mutes if the tab/window loses focus while `V` is held.
+  Transport is the native-WebSocket signalling relay (no socket.io).
+- **Collapsible panels** — the room's **Chat** and **Found sets** side panels each
+  have a Collapse/Open toggle so you can reclaim space on small screens.
 
 ## Prerequisites
 - Local: Node >= 20, npm. No native modules, no DB.
