@@ -33,6 +33,14 @@ rooms are in-memory, there is no database and no AI.
 
 ## Prerequisites
 - Local: Node >= 20, npm. No native modules, no DB.
+- Shared voice module: WebRTC voice (mesh media + signalling relay + push-to-talk)
+  is powered by **`@matvs/core-realtime`** (dep `file:../core/realtime`). It is
+  consumed from its built `dist/`, so **build it before typechecking/testing/running
+  this app** (once, and after any change to the shared package):
+  ```bash
+  cd ../core && npm install && npm run build -w @matvs/core-realtime && cd -
+  ```
+  See `../core/docs/REALTIME-VOICE-INTEGRATION.md`.
 - Droplet: Docker Engine + docker compose v2, host nginx + certbot, DNS access
   for `matvs.dev` (see apps/ORCHESTRATION.md and apps/DEPLOYMENT-WSL2.md).
 
@@ -41,6 +49,7 @@ Two processes (Vite for HMR + the tsx server); Vite proxies `/api` and
 `/ws` to the server so the browser stays same-origin (no CORS).
 
 ```bash
+cd ../core && npm run build -w @matvs/core-realtime && cd -   # build the shared voice module first
 npm install                 # first time (read-only npm cache? add --cache "$TMPDIR/npmcache")
 npm run dev                 # vite on :5173 + tsx server on :8462
 # open http://localhost:5173
@@ -88,6 +97,23 @@ docker compose down
 The service publishes on `127.0.0.1:8462` only. From the Windows browser use
 `http://localhost:8462` (WSL2 localhost forwarding).
 
+> **Container build — shared voice module.** Voice now depends on
+> `@matvs/core-realtime` (`file:../core/realtime`), a sibling repo outside this
+> build context. Before containerising, adopt the same pattern NummiSet already
+> uses (see `../NummiSet/Dockerfile` + `docker-compose.yml`):
+> 1. add `additional_contexts: { matvs_core: ../core }` under `build:` in
+>    `docker-compose.yml`;
+> 2. add a multi-stage step that copies `realtime/{package*.json,tsconfig.json,src}`
+>    and `config/` from `matvs_core`, runs `npm install && npm run build`, and
+>    copies the resulting `/core/realtime` (with `dist/`) into the app image so
+>    `file:../core/realtime` resolves;
+> 3. switch the app's `npm ci` → `npm install` (the lockfile now carries a `file:`
+>    dep; NummiSet does the same).
+>
+> Not applied here (strict mode = no docker); verify the image build after wiring
+> it. The **non-docker** dev/test/build path above is complete and needs only the
+> one-time `@matvs/core-realtime` build documented under Prerequisites.
+
 ## Deploy to DigitalOcean droplet
 1. **DNS**: add an A record `allornothing.matvs.dev` -> droplet IP.
 2. **Ship the release** to `/opt/allornothing`:
@@ -133,10 +159,10 @@ The service publishes on `127.0.0.1:8462` only. From the Windows browser use
   WebSocket upgrade is not reaching the container. Check the nginx
   `location /ws` block and the `$connection_upgrade` map; confirm
   `curl -I https://allornothing.matvs.dev/ws` returns 400 (not 404).
-- **Voice won't connect across networks**: the mesh uses a public STUN server;
-  strict/symmetric NATs need a TURN server (add it to `ICE_SERVERS` in
-  `src/features/room/useVoice.ts`). Signalling still works; only media relay is
-  affected.
+- **Voice won't connect across networks**: the shared mesh uses a public STUN
+  server (`DEFAULT_ICE_SERVERS` in `@matvs/core-realtime`); strict/symmetric NATs
+  need a TURN server — pass `iceServers: [...]` to `createVoiceMesh(...)` in
+  `src/features/room/useVoice.ts`. Signalling still works; only media is affected.
 - **CORS errors in the console**: you opened the Vite port in production instead
   of the server port. In prod the Node server serves the frontend on the same
   origin; open `:8462` (or the domain), not `:5173`.
