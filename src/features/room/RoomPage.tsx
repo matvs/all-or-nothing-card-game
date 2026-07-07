@@ -13,6 +13,7 @@ import { ExplanationTable } from "../../components/ExplanationTable.js";
 import { FoundSetsPanel } from "../../components/FoundSetsPanel.js";
 import { Board } from "../../game/Board.js";
 import { ChatPanel } from "./ChatPanel.js";
+import { CollapsiblePanel } from "./CollapsiblePanel.js";
 import { VoiceBar } from "./VoiceBar.js";
 import { handCursorDataUri } from "./handCursor.js";
 import { useRoom } from "./useRoom.js";
@@ -89,7 +90,6 @@ export function RoomPage() {
   const voice = useVoice(roomId);
   const containerRef = useRef<HTMLDivElement>(null);
   const [whyRows, setWhyRows] = useState<ExplanationRow[] | null>(null);
-  const [chatOpen, setChatOpen] = useState(true);
 
   if (room.needsLogin) {
     return (
@@ -205,26 +205,12 @@ export function RoomPage() {
         </Col>
 
         <Col lg={5} className="room-side">
-          <div className={`chat-shell${chatOpen ? "" : " is-collapsed"}`}>
-            <div className="panel-header">
-              <h2 className="h5 mb-0">Chat</h2>
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                onClick={() => setChatOpen((open) => !open)}
-                aria-expanded={chatOpen}
-                aria-controls="room-chat-panel"
-              >
-                {chatOpen ? "Collapse" : `Open (${room.chat.length})`}
-              </Button>
-            </div>
-            {chatOpen && (
-              <div id="room-chat-panel">
-                <ChatPanel messages={room.chat} onSend={room.sendChat} />
-              </div>
-            )}
-          </div>
-          <FoundSetsPanel sets={room.found} />
+          <CollapsiblePanel title="Chat" id="room-chat-panel" badge={room.chat.length}>
+            <ChatPanel messages={room.chat} onSend={room.sendChat} />
+          </CollapsiblePanel>
+          <CollapsiblePanel title="Found sets" id="room-found-panel" badge={room.found.length}>
+            <FoundSetsPanel sets={room.found} embedded />
+          </CollapsiblePanel>
         </Col>
       </Row>
 

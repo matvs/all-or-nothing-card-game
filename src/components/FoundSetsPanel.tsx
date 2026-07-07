@@ -9,12 +9,17 @@ import { ExplanationTable } from "./ExplanationTable.js";
  * its three figures plus the Explanation table, exactly like the original
  * (which rendered the three canvas snapshots as images).
  */
-export function FoundSetsPanel({ sets }: { sets: FoundSet[] }) {
+export function FoundSetsPanel({ sets, embedded = false }: { sets: FoundSet[]; embedded?: boolean }) {
   return (
     <div className="found-sets">
-      <h2>
-        Already <Badge bg="success">found</Badge> sets:
-      </h2>
+      {!embedded && (
+        <h2>
+          Already <Badge bg="success">found</Badge> sets:
+        </h2>
+      )}
+      {embedded && sets.length === 0 ? (
+        <p className="text-muted mb-0">No sets found yet.</p>
+      ) : null}
       <div className="found-sets__list">
         {sets.map((set, index) => (
           <Card key={index} className="found-set-card">
