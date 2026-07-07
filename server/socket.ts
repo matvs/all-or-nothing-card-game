@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
+import { VoiceSignalingRelay, VOICE_PEER_LEFT } from "@matvs/core-realtime/signaling";
 import {
   CHAT_MAX_LENGTH,
   type ClaimAck,
@@ -40,12 +41,37 @@ export class WsGateway {
   private readonly countdowns = new Map<string, NodeJS.Timeout>();
   private readonly heartbeat: NodeJS.Timeout;
 
+  /**
+   * WebRTC voice signalling is delegated to the shared `@matvs/core-realtime`
+   * relay (peer discovery + SDP/ICE forwarding). Membership is delegated back to
+   * the `Room` objects so the room snapshot's `voice[]` stays the source of truth.
+   * Media is peer-to-peer and never reaches this server.
+   */
+  private readonly voice: VoiceSignalingRelay<WebSocket>;
+
   constructor(
     private readonly wss: WebSocketServer,
     private readonly registry: RoomRegistry,
   ) {
     this.wss.on("connection", (ws, req) => this.onConnection(ws, req));
     this.heartbeat = setInterval(() => this.pingAll(), HEARTBEAT_MS);
+    this.voice = new VoiceSignalingRelay<WebSocket>(
+      {
+        toConn: (ws, t, d) => this.send(ws, t, d),
+        toRoom: (roomId, t, d, except) => this.broadcast(roomId, t, d, except),
+        toPlayer: (playerId, t, d) => this.toPlayer(playerId, t, d),
+        isRoomMember: (roomId, playerId) => this.registry.getRoom(roomId)?.has(playerId) ?? false,
+      },
+      {
+        membership: {
+          join: (roomId, playerId) => this.registry.getRoom(roomId)?.voiceJoin(playerId) ?? [],
+          leave: (roomId, playerId) => {
+            this.registry.getRoom(roomId)?.voiceLeave(playerId);
+          },
+          members: (roomId) => this.registry.getRoom(roomId)?.voice ?? [],
+        },
+      },
+    );
   }
 
   dispose(): void {
@@ -159,7 +185,7 @@ export class WsGateway {
         this.onVoiceLeave(ws, data, env.d as string);
         break;
       case "voice:signal":
-        this.onVoiceSignal(data, env.d as { roomId: string; to: string; data: RtcSignalData });
+        this.onVoiceSignal(ws, data, env.d as { roomId: string; to: string; data: RtcSignalData });
         break;
     }
   }
@@ -301,29 +327,24 @@ export class WsGateway {
   }
 
   // -- voice (WebRTC signalling relay) ---------------------------------------
+  // Delegated to @matvs/core-realtime's VoiceSignalingRelay (see `this.voice`).
+  // The relay owns the wire protocol (peer discovery + SDP/ICE forwarding); this
+  // app keeps voice membership in its Room objects via the injected adapter.
 
   private onVoiceJoin(ws: WebSocket, data: ConnData, roomId: string): void {
-    const room = this.registry.getRoom(roomId);
-    if (!room || !room.has(data.playerId)) return;
-    const peers = room.voiceJoin(data.playerId);
-    // Newcomer receives the current peers and initiates offers to each.
-    this.send(ws, "voice:peers", peers);
+    this.voice.onJoin(ws, roomId, data.playerId);
   }
 
   private onVoiceLeave(ws: WebSocket, data: ConnData, roomId: string): void {
-    const room = this.registry.getRoom(roomId);
-    if (!room) return;
-    room.voiceLeave(data.playerId);
-    this.broadcast(room.id, "voice:peerLeft", data.playerId, ws);
+    this.voice.onLeave(ws, roomId, data.playerId);
   }
 
   private onVoiceSignal(
+    ws: WebSocket,
     data: ConnData,
     msg: { roomId: string; to: string; data: RtcSignalData },
   ): void {
-    const room = this.registry.getRoom(msg?.roomId);
-    if (!room || !room.has(msg.to)) return;
-    this.toPlayer(msg.to, "voice:signal", { from: data.playerId, data: msg.data });
+    this.voice.onSignal(ws, data.playerId, msg);
   }
 
   // -- disconnect / reconnection --------------------------------------------
@@ -343,7 +364,7 @@ export class WsGateway {
       if (!room) continue;
       room.markOffline(data.playerId);
       this.broadcast(roomId, "room:players", room.roster());
-      this.broadcast(roomId, "voice:peerLeft", data.playerId);
+      this.broadcast(roomId, VOICE_PEER_LEFT, data.playerId);
     }
   }
 

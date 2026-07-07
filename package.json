@@ -21,6 +21,7 @@
     "verify:mp": "node --import tsx scripts/verify-multiplayer.mts"
   },
   "dependencies": {
+    "@matvs/core-realtime": "file:../core/realtime",
     "@reduxjs/toolkit": "^2.2.7",
     "bootstrap": "^5.3.3",
     "express": "^4.21.0",
