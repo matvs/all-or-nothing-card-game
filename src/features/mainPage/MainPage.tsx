@@ -40,9 +40,9 @@ export function MainPage({ user, onLogin, onCreateRoom, onJoinRoom }: MainPagePr
           </div>
         </Col>
       </Row>
-      <Row>
+      <Row className="g-4">
         <Col md={6}>
-          <Card>
+          <Card className="h-100">
             <Card.Body>
               <Card.Title>SinglePlayer</Card.Title>
               <Card.Text>
@@ -56,7 +56,7 @@ export function MainPage({ user, onLogin, onCreateRoom, onJoinRoom }: MainPagePr
           </Card>
         </Col>
         <Col md={6}>
-          <Card>
+          <Card className="h-100">
             <Card.Body>
               <Card.Title>MultiPlayer</Card.Title>
               <Card.Text>
