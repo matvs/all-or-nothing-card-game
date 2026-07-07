@@ -224,17 +224,32 @@ async function main(): Promise<void> {
     await pageB.waitForFunction(() => !!document.querySelector(".voice-peer"), { timeout: 15000 });
     assert(true, "Alice sees Bob in the voice channel (offer/answer relayed)");
     assert(true, "Bob sees Alice in the voice channel (offer/answer relayed)");
-    // Exercise push-to-talk: Alice holds to talk (enables her mic track).
-    await pageA.evaluate(() => {
-      const btn = Array.from(document.querySelectorAll("button")).find((b) =>
-        (b.textContent ?? "").includes("Hold to talk"),
+    // Exercise push-to-talk two ways — the on-screen button AND the V key —
+    // since the keyboard hold-to-talk is the headline control. Both just
+    // enable Alice's mic track and flip the button label to "Talking".
+    const aliceTalking = () =>
+      pageA.evaluate(() =>
+        Array.from(document.querySelectorAll("button")).some((b) => (b.textContent ?? "").includes("Talking")),
       );
-      btn?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    });
-    const talking = await pageA.evaluate(() =>
-      Array.from(document.querySelectorAll("button")).some((b) => (b.textContent ?? "").includes("Talking")),
+
+    // (1) Button: pointer-down holds the mic open; pointer-up releases it.
+    await pageA.evaluate(() =>
+      document.querySelector(".ptt-button")?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })),
     );
-    assert(talking, "Push-to-talk enables Alice's mic (button shows Talking)");
+    await wait(100);
+    assert(await aliceTalking(), "Push-to-talk button opens Alice's mic (button shows Talking)");
+    await pageA.evaluate(() =>
+      document.querySelector(".ptt-button")?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true })),
+    );
+    await wait(100);
+
+    // (2) Keyboard: hold V to talk, release to mute. Blur first so the key is
+    // not swallowed by the chat input.
+    await pageA.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await pageA.keyboard.down("v");
+    await wait(100);
+    assert(await aliceTalking(), "Push-to-talk V key opens Alice's mic (button shows Talking)");
+    await pageA.keyboard.up("v");
     await wait(200);
     await pageA.screenshot({ path: path.join(OUT, "race-voice.png") as `${string}.png` });
 

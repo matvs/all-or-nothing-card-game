@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RtcSignalData } from "../../../shared/protocol.js";
 import { getSocket } from "../../net/socket.js";
+import { isPushToTalkKey, isTypingTarget } from "./pushToTalk.js";
 
 /** One remote participant in the voice mesh and its live connection state. */
 export interface VoicePeer {
@@ -220,32 +221,37 @@ export function useVoice(roomId: string): UseVoice {
     setTalkingState(on);
   }, []);
 
+  // Push-to-talk: hold the talk key (V) to open the mic, release to mute. The
+  // handlers are global (on window) so the key works without focusing anything.
   useEffect(() => {
     if (!inVoice) return;
 
-    const isTypingTarget = (target: EventTarget | null): boolean => {
-      if (!(target instanceof HTMLElement)) return false;
-      const tag = target.tagName.toLowerCase();
-      return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
-    };
-    const isTalkKey = (event: KeyboardEvent) => event.key.toLowerCase() === "v";
-
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat || isTypingTarget(event.target) || !isTalkKey(event)) return;
+      if (event.repeat || isTypingTarget(event.target) || !isPushToTalkKey(event.key)) return;
       event.preventDefault();
       setTalking(true);
     };
     const onKeyUp = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target) || !isTalkKey(event)) return;
+      if (isTypingTarget(event.target) || !isPushToTalkKey(event.key)) return;
       event.preventDefault();
       setTalking(false);
+    };
+    // Safety net: if the tab/window loses focus while the key is held down, the
+    // keyup never arrives — force-mute so the mic is never left open unheard.
+    const release = () => setTalking(false);
+    const onVisibility = () => {
+      if (document.hidden) release();
     };
 
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", release);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", release);
+      document.removeEventListener("visibilitychange", onVisibility);
       setTalking(false);
     };
   }, [inVoice, setTalking]);

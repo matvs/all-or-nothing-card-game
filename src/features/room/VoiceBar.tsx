@@ -1,5 +1,6 @@
 import Button from "react-bootstrap/Button";
 import type { RoomPlayer } from "../../../shared/protocol.js";
+import { PUSH_TO_TALK_KEY_LABEL } from "./pushToTalk.js";
 import type { UseVoice } from "./useVoice.js";
 
 /**
@@ -37,8 +38,11 @@ export function VoiceBar({ voice, players }: { voice: UseVoice; players: RoomPla
             onPointerUp={() => voice.setTalking(false)}
             onPointerLeave={() => voice.setTalking(false)}
           >
-            {voice.talking ? "Talking..." : "Hold V or press here"}
+            {voice.talking ? "Talking…" : `Hold ${PUSH_TO_TALK_KEY_LABEL} or press here`}
           </Button>
+          <span className="voice-live" role="status" aria-live="polite">
+            {voice.talking ? `● Live — ${PUSH_TO_TALK_KEY_LABEL} held` : ""}
+          </span>
           <Button variant="outline-secondary" size="sm" onClick={voice.leave}>
             Leave voice
           </Button>
