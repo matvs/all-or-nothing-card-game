@@ -19,7 +19,7 @@ WORKDIR /core/realtime
 COPY --from=matvs_core realtime/package.json ./
 COPY --from=matvs_core realtime/tsconfig.json ./
 COPY --from=matvs_core realtime/src ./src
-RUN npm install --no-audit --no-fund
+RUN npm install --no-audit --no-fund --legacy-peer-deps
 # @matvs/tsconfig is referenced by the tsconfig `extends` bare specifier but is NOT a declared
 # dependency (the core workspace normally symlinks it); provide it so the isolated build resolves.
 COPY --from=matvs_core config/typescript ./node_modules/@matvs/tsconfig
