@@ -2,7 +2,7 @@ import express, { type Express } from "express";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { env } from "./env.js";
-import { createApiRouter } from "./http/api.js";
+import { createApiRouter, type ApiDeps } from "./http/api.js";
 import { RoomRegistry, type RegistryOptions } from "./rooms/registry.js";
 
 export interface AppOptions {
@@ -10,6 +10,8 @@ export interface AppOptions {
   registryOptions?: RegistryOptions;
   /** Serve the built frontend from here (default: dist/ in production). */
   staticDir?: string | null;
+  /** Injectable API dependencies (tests stub the IdP authentication). */
+  apiDeps?: ApiDeps;
 }
 
 export interface AppBundle {
@@ -27,7 +29,7 @@ export function createApp(options: AppOptions = {}): AppBundle {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "16kb" }));
-  app.use("/api", createApiRouter(registry));
+  app.use("/api", createApiRouter(registry, options.apiDeps));
 
   const staticDir = options.staticDir === undefined ? defaultStaticDir() : options.staticDir;
   if (staticDir) {

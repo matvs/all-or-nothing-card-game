@@ -94,17 +94,32 @@ function openSocket(player: Player): void {
 
 // -- thunks ------------------------------------------------------------------
 
+/**
+ * Real sign-in against the central IdP (via the game server). Resolves to `null` on
+ * success or a human-readable failure message (bad credentials, awaiting approval,
+ * IdP unreachable) the login modal shows inline.
+ */
 export const loginApi =
-  (name: string) =>
-  async (dispatch: AppDispatch): Promise<void> => {
-    const data = await postJson<LoginResponse & { error?: boolean }>("/login", { name });
-    if ((data as { error?: boolean }).error) {
-      dispatch(setAlert({ key: "message", variant: "danger", text: "That name is not allowed." }));
-      return;
+  (username: string, password: string) =>
+  async (dispatch: AppDispatch): Promise<string | null> => {
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+    } catch {
+      return "Sign-in is temporarily unavailable.";
+    }
+    const data = (await res.json()) as (LoginResponse & { error?: boolean; message?: string });
+    if (!res.ok || data.error) {
+      return data.message ?? "Invalid username or password.";
     }
     persist(data);
     openSocket(data);
     dispatch(loggedIn(data));
+    return null;
   };
 
 /** Silent auto-login on page load if a stored token is still valid. */

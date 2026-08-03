@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "private": true,
   "type": "module",
-  "description": "All or Nothing — a SET card game. Find sets of three cards where colour, shape, filling and number are each all the same or all different. Single-player puzzle plus real-time multiplayer rooms over native WebSockets, with text chat and push-to-talk WebRTC voice. React + Redux Toolkit + react-bootstrap frontend, Node + ws (native WebSocket) backend, faithful canvas-drawn card figures.",
+  "description": "All or Nothing \u2014 a SET card game. Find sets of three cards where colour, shape, filling and number are each all the same or all different. Single-player puzzle plus real-time multiplayer rooms over native WebSockets, with text chat and push-to-talk WebRTC voice. React + Redux Toolkit + react-bootstrap frontend, Node + ws (native WebSocket) backend, faithful canvas-drawn card figures.",
   "engines": {
     "node": ">=20"
   },
@@ -31,7 +31,8 @@
     "react-redux": "^9.1.2",
     "react-router-dom": "^6.26.2",
     "tsx": "^4.19.1",
-    "ws": "^8.21.0"
+    "ws": "^8.21.0",
+    "@matvs/core-node": "file:../core/auth/backend/node"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

@@ -86,7 +86,9 @@ export interface RoomSnapshot {
 // ---------------------------------------------------------------------------
 
 export interface LoginRequest {
-  name: string;
+  /** Account username (or email) at the central IdP — NOT a free-form nickname. */
+  username: string;
+  password: string;
 }
 export interface LoginResponse {
   id: string;

@@ -4,7 +4,18 @@ import type { Express } from "express";
 import { createApp } from "../../app.js";
 
 function makeApp(): Express {
-  return createApp({ staticDir: null, registryOptions: { seedRooms: [] } }).app;
+  // IdP auth is stubbed: "pw" is the only good password, and the verified table name is
+  // always the account's ("Alice"/"Bob" by username) — never free-form input.
+  return createApp({
+    staticDir: null,
+    registryOptions: { seedRooms: [] },
+    apiDeps: {
+      authenticate: async (username: string, password: string) =>
+        password === "pw"
+          ? { ok: true as const, name: username === "bob" ? "Bob" : "Alice" }
+          : { ok: false as const, status: 401, message: "Invalid username or password." },
+    },
+  }).app;
 }
 
 describe("REST API", () => {
@@ -19,28 +30,28 @@ describe("REST API", () => {
     expect(res.body).toMatchObject({ ok: true });
   });
 
-  it("POST /api/login accepts a valid name and returns an identity + token", async () => {
-    const res = await request(app).post("/api/login").send({ name: "Alice" });
+  it("POST /api/login authenticates real credentials and returns the VERIFIED identity + token", async () => {
+    const res = await request(app).post("/api/login").send({ username: "alice", password: "pw" });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ name: "Alice" });
     expect(res.body.id).toBeTruthy();
     expect(res.body.token).toBeTruthy();
   });
 
-  it("POST /api/login rejects a too-short name", async () => {
-    const res = await request(app).post("/api/login").send({ name: "ab" });
+  it("POST /api/login rejects missing credentials — no anonymous play", async () => {
+    const res = await request(app).post("/api/login").send({ username: "alice" });
     expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({ error: true, errorCode: "invalidName" });
+    expect(res.body).toMatchObject({ error: true, errorCode: "missingCredentials" });
   });
 
-  it("POST /api/login rejects a forbidden name", async () => {
-    const res = await request(app).post("/api/login").send({ name: "fuck" });
-    expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({ error: true, errorCode: "invalidName" });
+  it("POST /api/login rejects bad credentials with the IdP's status", async () => {
+    const res = await request(app).post("/api/login").send({ username: "alice", password: "wrong" });
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ error: true, errorCode: "authFailed" });
   });
 
   it("POST /api/welcome restores a session for a known token", async () => {
-    const login = await request(app).post("/api/login").send({ name: "Bob" });
+    const login = await request(app).post("/api/login").send({ username: "bob", password: "pw" });
     const res = await request(app).post("/api/welcome").send({ token: login.body.token });
     expect(res.body).toMatchObject({ foundSession: true });
     expect(res.body.player).toMatchObject({ name: "Bob" });

@@ -3,20 +3,13 @@ import {
   type CreateRoomRequest,
   type JoinRoomRequest,
   type LoginRequest,
-  NAME_MAX_LENGTH,
-  NAME_MIN_LENGTH,
 } from "../../shared/protocol.js";
 import type { RoomRegistry } from "../rooms/registry.js";
+import { authenticate, enduserAuthConfig, registerUrlFor, type AuthOutcome } from "./enduserAuth.js";
 
-const FORBIDDEN_NAMES = new Set(["kurwa", "dick", "fuck", "cyril"]);
-
-function validName(name: unknown): name is string {
-  return (
-    typeof name === "string" &&
-    name.trim().length >= NAME_MIN_LENGTH &&
-    name.trim().length <= NAME_MAX_LENGTH &&
-    !FORBIDDEN_NAMES.has(name.trim().toLowerCase())
-  );
+export interface ApiDeps {
+  /** Injectable for tests — production authenticates against the central IdP. */
+  authenticate?: (username: string, password: string) => Promise<AuthOutcome>;
 }
 
 /**
@@ -24,21 +17,37 @@ function validName(name: unknown): name is string {
  * voice signalling) runs over a native WebSocket. Same-origin in production, so there is
  * no CORS to configure.
  */
-export function createApiRouter(registry: RoomRegistry): Router {
+export function createApiRouter(registry: RoomRegistry, deps: ApiDeps = {}): Router {
   const router = Router();
+  const cfg = enduserAuthConfig();
+  const doAuth = deps.authenticate ?? ((u: string, p: string) => authenticate(cfg, u, p));
 
   router.get("/health", (_req, res) => {
     res.json({ ok: true, rooms: registry.roomCount });
   });
 
+  // The login modal asks where account creation lives (Keycloak's account console).
+  router.get("/auth/config", (_req, res) => {
+    res.json({ registerUrl: registerUrlFor(cfg) });
+  });
+
+  // Real sign-in: credentials are checked at the central IdP and the display name is the
+  // VERIFIED identity's — the old free-form nickname login is gone. Only then does the
+  // game mint its session token (the socket credential), so playing requires an account.
   router.post("/login", (req, res) => {
-    const { name } = req.body as LoginRequest;
-    if (!validName(name)) {
-      res.status(400).json({ error: true, errorCode: "invalidName" });
+    const { username, password } = (req.body ?? {}) as Partial<LoginRequest>;
+    if (typeof username !== "string" || !username.trim() || typeof password !== "string" || !password) {
+      res.status(400).json({ error: true, errorCode: "missingCredentials", message: "Username and password are required." });
       return;
     }
-    const identity = registry.createPlayer(name.trim());
-    res.json({ id: identity.id, name: identity.name, token: identity.token });
+    void doAuth(username.trim(), password).then((outcome) => {
+      if (!outcome.ok) {
+        res.status(outcome.status).json({ error: true, errorCode: "authFailed", message: outcome.message });
+        return;
+      }
+      const identity = registry.createPlayer(outcome.name);
+      res.json({ id: identity.id, name: identity.name, token: identity.token });
+    });
   });
 
   router.post("/welcome", (req, res) => {

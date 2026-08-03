@@ -54,8 +54,22 @@ export function App() {
           }
         />
         <Route path="/how-to-play" element={<HowToPlayPage />} />
-        <Route path="/singleplayer" element={<SinglePlayerPage />} />
-        <Route path="/room/:roomId" element={<RoomPage />} />
+        <Route
+          path="/singleplayer"
+          element={
+            <RequireUser signedIn={!!user} onLogin={() => setShowLogin(true)}>
+              <SinglePlayerPage />
+            </RequireUser>
+          }
+        />
+        <Route
+          path="/room/:roomId"
+          element={
+            <RequireUser signedIn={!!user} onLogin={() => setShowLogin(true)}>
+              <RoomPage />
+            </RequireUser>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
@@ -63,5 +77,30 @@ export function App() {
       <CreateRoomModal show={showCreate} onClose={() => setShowCreate(false)} />
       <JoinRoomModal show={showJoin} onClose={() => setShowJoin(false)} />
     </div>
+  );
+}
+
+/**
+ * The play gate: reading the rules is open, PLAYING requires a signed-in account —
+ * single-player included. Renders the sign-in prompt in place of the game.
+ */
+function RequireUser({
+  signedIn,
+  onLogin,
+  children,
+}: {
+  signedIn: boolean;
+  onLogin: () => void;
+  children: JSX.Element;
+}) {
+  if (signedIn) return children;
+  return (
+    <Container className="py-5 text-center">
+      <h2>Sign in to play</h2>
+      <p className="text-muted">All or Nothing needs your Matvs account — no anonymous games.</p>
+      <button type="button" className="btn btn-primary btn-lg" onClick={onLogin}>
+        Sign in
+      </button>
+    </Container>
   );
 }
