@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import {
   createVoiceMesh,
   isVoiceSupported,
+  voiceUnavailableReason,
+  type VoiceUnavailableReason,
   type VoiceMeshClient,
   type VoiceMeshState,
   type VoicePeer,
@@ -14,6 +16,8 @@ export type { VoicePeer };
 
 export interface UseVoice {
   supported: boolean;
+  /** When unsupported, the true cause — "insecure" (plain-HTTP origin) or "unsupported" (browser). */
+  unavailableReason: VoiceUnavailableReason;
   inVoice: boolean;
   connecting: boolean;
   talking: boolean;
@@ -82,6 +86,7 @@ export function useVoice(roomId: string): UseVoice {
 
   return {
     supported: isVoiceSupported(),
+    unavailableReason: voiceUnavailableReason(),
     inVoice: state.inVoice,
     connecting: state.connecting,
     talking: state.talking,

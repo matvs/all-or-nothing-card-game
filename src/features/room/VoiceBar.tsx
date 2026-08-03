@@ -12,7 +12,11 @@ export function VoiceBar({ voice, players }: { voice: UseVoice; players: RoomPla
   if (!voice.supported) {
     return (
       <div className="voice-bar">
-        <span className="text-muted">Voice chat is not supported in this browser.</span>
+        <span className="text-muted">
+          {voice.unavailableReason === "insecure"
+            ? "Voice needs a secure connection (HTTPS or localhost). Text chat works everywhere — or open the game on the computer at http://127.0.0.1."
+            : "This browser has no WebRTC voice support. Text chat still works."}
+        </span>
       </div>
     );
   }
