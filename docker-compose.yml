@@ -22,6 +22,13 @@ services:
       NODE_ENV: production
       PORT: "8462"
       TZ: Europe/Warsaw
+      # Real sign-in (2026-08): identity delegates to the fleet IdP. The issuer
+      # is the single cutover switch; keycloak.matvs resolves via the shared
+      # ldm-proxy network below (legacy manager is reached the same way).
+      ENDUSERS_MANAGER_URL: ${ENDUSERS_MANAGER_URL:-http://endusers-manager:8080}
+      ENDUSERS_ISSUER: ${ENDUSERS_ISSUER:-https://endusers.matvs.dev}
+    networks:
+      - ldm-proxy
     ports:
       # Loopback bind only — reachable from the Windows browser via WSL2
       # localhost forwarding, never exposed on other interfaces.
@@ -36,3 +43,9 @@ services:
       timeout: 4s
       retries: 3
       start_period: 8s
+
+# Shared external network the central IdP lives on (created by ldm or manually:
+#   docker network create ldm-proxy
+networks:
+  ldm-proxy:
+    external: true
