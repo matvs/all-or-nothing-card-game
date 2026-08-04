@@ -25,6 +25,20 @@ RUN npm install --no-audit --no-fund --legacy-peer-deps
 COPY --from=matvs_core config/typescript ./node_modules/@matvs/tsconfig
 RUN npm run build
 
+# Same treatment for @matvs/core-node — the shared auth helpers behind real credential sign-in
+# (`file:../core/auth/backend/node`). It is a SECOND file: dependency, and every one of them must
+# be vendored below: npm installs them as symlinks pointing outside /app, and a symlink whose
+# target was never copied in is accepted silently at build time and only explodes at startup
+# (ERR_MODULE_NOT_FOUND). `server/__tests__/dockerfile-vendoring.test.ts` enforces the pairing.
+FROM node:22-bookworm-slim AS core-node
+WORKDIR /core/auth/backend/node
+COPY --from=matvs_core auth/backend/node/package.json ./
+COPY --from=matvs_core auth/backend/node/tsconfig.json ./
+COPY --from=matvs_core auth/backend/node/src ./src
+RUN npm install --no-audit --no-fund --legacy-peer-deps
+COPY --from=matvs_core config/typescript ./node_modules/@matvs/tsconfig
+RUN npm run build
+
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 
@@ -32,6 +46,10 @@ WORKDIR /app
 # resolves during install (from /app that path points at /core/realtime).
 COPY --from=core-realtime /core/realtime/package.json /core/realtime/package.json
 COPY --from=core-realtime /core/realtime/dist /core/realtime/dist
+
+# …and @matvs/core-node (`file:../core/auth/backend/node` → /core/auth/backend/node).
+COPY --from=core-node /core/auth/backend/node/package.json /core/auth/backend/node/package.json
+COPY --from=core-node /core/auth/backend/node/dist /core/auth/backend/node/dist
 
 # Install deps against a cached layer (re-runs only when the lockfile changes).
 COPY package.json package-lock.json ./
@@ -58,10 +76,14 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends tini \
     && rm -rf /var/lib/apt/lists/*
 
-# node_modules carries a symlink `@matvs/core-realtime` -> /core/realtime (the file: dependency);
-# vendor its compiled output here too so the server resolves it at runtime (via tsx).
+# node_modules carries symlinks `@matvs/core-realtime` -> /core/realtime and `@matvs/core-node`
+# -> /core/auth/backend/node (the file: dependencies); vendor their compiled output here too so
+# the server resolves them at runtime (via tsx). Copying node_modules alone only copies the
+# symlinks — the targets must come along or every import of them fails at startup.
 COPY --from=core-realtime /core/realtime/package.json /core/realtime/package.json
 COPY --from=core-realtime /core/realtime/dist /core/realtime/dist
+COPY --from=core-node /core/auth/backend/node/package.json /core/auth/backend/node/package.json
+COPY --from=core-node /core/auth/backend/node/dist /core/auth/backend/node/dist
 
 # Copy the pruned dependency tree and the app (server + shared TS run via tsx).
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
